@@ -29,7 +29,7 @@ export default function QuizHistoryPage() {
       <Sidebar userRole="Student" currentPage="history" />
 
       {/* Main Content */}
-      <main className="flex-1 p-6 space-y-6">
+      <main className="flex-1 p-6 space-y-6 ml-64">
         <h1 className="text-2xl font-bold text-gray-900">Quiz History</h1>
         <p className="text-sm text-gray-600">Review your past quiz performances and retake quizzes.</p>
 

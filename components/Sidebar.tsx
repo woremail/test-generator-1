@@ -23,9 +23,9 @@ export default function Sidebar({ userRole, currentPage }: SidebarProps) {
 
   const teacherMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'ri-dashboard-line', href: '/teacher/dashboard' },
+    { id: 'quiz', label: 'Generate Quiz', icon: 'ri-add-line', href: '/teacher/quiz' },
     { id: 'books', label: 'Books & Chapters', icon: 'ri-book-line', href: '/teacher/books' },
     { id: 'questions', label: 'Question Bank', icon: 'ri-question-answer-line', href: '/teacher/questions' },
-    { id: 'quiz', label: 'Quiz Generator', icon: 'ri-file-list-3-line', href: '/teacher/quiz' },
     { id: 'interactiveQuiz', label: 'Interactive Quiz', icon: 'ri-file-list-3-line', href: '/teacher/interactiveQuiz' },
     { id: 'profile', label: 'Profile', icon: 'ri-user-line', href: '/teacher/profile' },
   ];
@@ -57,8 +57,8 @@ export default function Sidebar({ userRole, currentPage }: SidebarProps) {
           <div className="flex items-center space-x-3">
             {!isCollapsed && (
               <div>
-                <h1 className="text-xl font-bold text-white">Test Generator</h1>
-                <p className="text-xs text-gray-300">{userRole} Panel</p>
+                <h1 className="text-xl font-bold text-white">OXFORD</h1>
+                <p className="text-xs text-gray-300">UNIVERSITY PRESS</p>
               </div>
             )}
           </div>
@@ -79,7 +79,7 @@ export default function Sidebar({ userRole, currentPage }: SidebarProps) {
                 href={item.href}
                 className={`flex items-center space-x-3 px-3 py-3 rounded-lg transition-colors cursor-pointer ${
                   currentPage === item.id
-                    ? 'bg-blue-800 text-white border-r-2 border-white'
+                    ? 'bg-white text-[#002147] font-semibold'
                     : 'text-gray-300 hover:bg-blue-900'
                 }`}
               >
@@ -94,7 +94,7 @@ export default function Sidebar({ userRole, currentPage }: SidebarProps) {
       <div className="absolute bottom-6 left-0 right-0 px-4">
         <button
           onClick={handleLogout}
-          className="flex items-center space-x-3 px-3 py-3 rounded-lg text-gray-300 hover:bg-blue-900 transition-colors cursor-pointer"
+          className="flex items-center space-x-3 px-3 py-3 rounded-lg text-gray-300 hover:bg-blue-900 transition-colors cursor-pointer w-full"
         >
           <i className="ri-logout-box-line w-5 h-5 flex items-center justify-center"></i>
           {!isCollapsed && <span className="text-sm font-medium whitespace-nowrap">Logout</span>}

@@ -1,4 +1,4 @@
-// File: C:\test-generator\app\teacher\dashboard\page.tsx
+// File: /home/user/test-generator/app/teacher/dashboard/page.tsx
 import * as entry from '../../../../../app/teacher/dashboard/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

@@ -11,7 +11,7 @@ export default function StudentDashboardPage() {
       <Sidebar userRole="Student" currentPage="dashboard" />
 
       {/* Main Content */}
-      <main className="flex-1 p-6 space-y-6">
+      <main className="flex-1 p-6 space-y-6 ml-64">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Student Dashboard</h1>
           <p className="text-sm text-gray-600">Good morning! Ready to challenge yourself with a new quiz today?</p>

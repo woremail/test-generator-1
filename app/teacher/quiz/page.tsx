@@ -5,10 +5,8 @@ import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore
 import Sidebar from '@/components/Sidebar';
 import { v4 as uuidv4 } from 'uuid';
 import { MathJax, MathJaxContext } from 'better-react-mathjax';
-import dynamic from 'next/dynamic';
 
-const docx = dynamic(() => import('docx'), { ssr: false });
-const { saveAs } = dynamic(() => import('file-saver'), { ssr: false });
+// Dynamic imports will be handled directly in the function
 
 const shuffle = (array, seed) => {
   const seededRandom = seed
@@ -25,11 +23,109 @@ const toUrduNumber = (num) => {
   return num.toString().split('').map(digit => urduNumerals[parseInt(digit)] || digit).join('');
 };
 
+const latexToReadable = (latex) => {
+  let readable = latex;
+  
+  // Convert common LaTeX to Unicode/readable symbols
+  readable = readable.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
+  readable = readable.replace(/\^2/g, '²');
+  readable = readable.replace(/\^3/g, '³');
+  readable = readable.replace(/\^([0-9])/g, (match, num) => {
+    const superscripts = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+    return superscripts[num] || '^' + num;
+  });
+  readable = readable.replace(/\\sqrt\{([^}]+)\}/g, '√($1)');
+  readable = readable.replace(/\\pi/g, 'π');
+  readable = readable.replace(/\\alpha/g, 'α');
+  readable = readable.replace(/\\beta/g, 'β');
+  readable = readable.replace(/\\theta/g, 'θ');
+  readable = readable.replace(/\\sum/g, 'Σ');
+  readable = readable.replace(/\\int/g, '∫');
+  readable = readable.replace(/\\infty/g, '∞');
+  readable = readable.replace(/\\leq/g, '≤');
+  readable = readable.replace(/\\geq/g, '≥');
+  readable = readable.replace(/\\neq/g, '≠');
+  readable = readable.replace(/\\pm/g, '±');
+  readable = readable.replace(/\\times/g, '×');
+  readable = readable.replace(/\\div/g, '÷');
+  readable = readable.replace(/\\cdot/g, '·');
+  
+  return readable;
+};
+
+const extractLatexFromFormulas = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  
+  // Replace {formula:...} with inline math delimiters $...$
+  let result = text;
+  let index = 0;
+  
+  while (index < result.length) {
+    const formulaStart = result.indexOf('{formula:', index);
+    if (formulaStart === -1) break;
+    
+    // Find the matching closing brace by counting balance
+    let braceCount = 1;
+    let pos = formulaStart + 9; // Start after '{formula:'
+    
+    while (pos < result.length && braceCount > 0) {
+      if (result[pos] === '{') braceCount++;
+      else if (result[pos] === '}') braceCount--;
+      pos++;
+    }
+    
+    if (braceCount === 0) {
+      const latex = result.substring(formulaStart + 9, pos - 1);
+      // Wrap formula in inline math delimiters
+      result = result.substring(0, formulaStart) + '$' + latex + '$' + result.substring(pos);
+      index = formulaStart + latex.length + 2; // +2 for the $ delimiters
+    } else {
+      index = formulaStart + 9;
+    }
+  }
+  
+  return result;
+};
+
+const convertFormulasToReadable = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  
+  // Handle formulas with nested braces by counting brace balance
+  let result = text;
+  let index = 0;
+  
+  while (index < result.length) {
+    const formulaStart = result.indexOf('{formula:', index);
+    if (formulaStart === -1) break;
+    
+    // Find the matching closing brace by counting balance
+    let braceCount = 1;
+    let pos = formulaStart + 9; // Start after '{formula:'
+    
+    while (pos < result.length && braceCount > 0) {
+      if (result[pos] === '{') braceCount++;
+      else if (result[pos] === '}') braceCount--;
+      pos++;
+    }
+    
+    if (braceCount === 0) {
+      const latex = result.substring(formulaStart + 9, pos - 1);
+      const readable = latexToReadable(latex);
+      result = result.substring(0, formulaStart) + readable + result.substring(pos);
+      index = formulaStart + readable.length;
+    } else {
+      index = formulaStart + 9;
+    }
+  }
+  
+  return result;
+};
+
 const QuizGeneration = () => {
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
-  const [questionTypes, setQuestionTypes] = useState({ multiple: true, truefalse: true, short: false, long: false, fillblanks: false });
-  const [difficultyLevels, setDifficultyLevels] = useState({ Easy: true, Medium: true, Hard: false });
+  const [questionTypes, setQuestionTypes] = useState({ multiple: false, truefalse: false, short: false, long: false, fillblanks: false });
+  const [difficultyLevels, setDifficultyLevels] = useState({ Easy: false, Medium: false, Hard: false });
   const [totalQuestions, setTotalQuestions] = useState(20);
   const [timeLimit, setTimeLimit] = useState(30);
   const [scheduledStart, setScheduledStart] = useState('');
@@ -44,6 +140,7 @@ const QuizGeneration = () => {
   const [questions, setQuestions] = useState([]);
   const [hasQuestionType, setHasQuestionType] = useState(false);
   const [randomSeed, setRandomSeed] = useState(uuidv4());
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const grades = ['1', '2', '3', '4', '5'];
   const subjects = ['English', 'Math', 'Urdu', 'Science', 'Computer'];
@@ -83,7 +180,8 @@ const QuizGeneration = () => {
 
   const getTotalAvailableQuestions = useCallback(() => filterQuestions().length, [filterQuestions]);
 
-  const generateQuestions = useCallback(() => {
+  const generateQuestions = useCallback((overrideSeed = null) => {
+    const seedToUse = overrideSeed || randomSeed;
     const filtered = filterQuestions();
     if (!Object.values(difficultyLevels).some(Boolean) || (hasQuestionType && !Object.values(questionTypes).some(Boolean))) return [];
 
@@ -98,22 +196,22 @@ const QuizGeneration = () => {
             const qType = (q.type || q.questionType || '').toLowerCase();
             return qType === type.toLowerCase() || (qType === 'mcqs' && type === 'multiple');
           });
-          allQuestions = [...allQuestions, ...shuffle(bucket, randomSeed).slice(0, Math.floor(totalQuestions / (selectedTypes.length * selectedDifficulties.length)))];
+          allQuestions = [...allQuestions, ...shuffle(bucket, seedToUse).slice(0, Math.floor(totalQuestions / (selectedTypes.length * selectedDifficulties.length)))];
         });
       });
     } else {
       selectedDifficulties.forEach(difficulty => {
         const bucket = filtered.filter(q => (q.difficulty || '').toLowerCase() === difficulty.toLowerCase());
-        allQuestions = [...allQuestions, ...shuffle(bucket, randomSeed).slice(0, Math.floor(totalQuestions / selectedDifficulties.length))];
+        allQuestions = [...allQuestions, ...shuffle(bucket, seedToUse).slice(0, Math.floor(totalQuestions / selectedDifficulties.length))];
       });
     }
 
     const remaining = totalQuestions - allQuestions.length;
     if (remaining > 0) {
-      allQuestions = [...allQuestions, ...shuffle(filtered.filter(q => !allQuestions.includes(q)), randomSeed).slice(0, remaining)];
+      allQuestions = [...allQuestions, ...shuffle(filtered.filter(q => !allQuestions.includes(q)), seedToUse).slice(0, remaining)];
     }
 
-    return shuffle(allQuestions.slice(0, totalQuestions), randomSeed)
+    return shuffle(allQuestions.slice(0, totalQuestions), seedToUse)
       .map((q, i) => {
         if (!q.questionText || !q.difficulty || !q.subject || !q.grade) return null;
 
@@ -121,7 +219,7 @@ const QuizGeneration = () => {
         let options = qType === 'multiple' ? shuffle(q.options.map((opt, idx) => ({
           text: opt || `Option ${idx + 1}`,
           format: q.subject === 'Math' ? 'math' : 'text',
-        })), randomSeed) : [];
+        })), seedToUse) : [];
 
         let answer = qType === 'multiple'
           ? { value: options.findIndex(opt => opt.text === q.correctAnswer), text: q.correctAnswer }
@@ -175,18 +273,26 @@ const QuizGeneration = () => {
   const confirmGenerateQuiz = async () => {
     if (!quizTitle || quizTitle.length > 120) {
       alert('Quiz title is required and must be under 120 characters');
-      setRandomSeed(uuidv4());
-      setEditedQuestions(generateQuestions());
+      const newSeed = uuidv4();
+      setRandomSeed(newSeed);
+      const newQuestions = generateQuestions(newSeed);
+      setEditedQuestions(newQuestions);
       return;
     }
 
-    const questions = generateQuestions();
-    if (questions.length === 0) {
-      const selectedTypes = Object.keys(questionTypes).filter(t => questionTypes[t]);
-      const selectedDifficulties = Object.keys(difficultyLevels).filter(d => difficultyLevels[d]);
-      alert(`No questions available for the selected criteria.\nGrade: ${selectedGrade}\nSubject: ${selectedSubject}\n${hasQuestionType ? `Question Types: ${selectedTypes.join(', ')}\n` : ''}Difficulties: ${selectedDifficulties.join(', ')}\nPlease check your database for matching questions.`);
-      return;
-    }
+    setIsGenerating(true);
+    
+    try {
+      // Generate new random seed for each quiz to ensure different questions every time
+      const newSeed = uuidv4();
+      setRandomSeed(newSeed);
+      const questions = generateQuestions(newSeed);
+      if (questions.length === 0) {
+        const selectedTypes = Object.keys(questionTypes).filter(t => questionTypes[t]);
+        const selectedDifficulties = Object.keys(difficultyLevels).filter(d => difficultyLevels[d]);
+        alert(`No questions available for the selected criteria.\nGrade: ${selectedGrade}\nSubject: ${selectedSubject}\n${hasQuestionType ? `Question Types: ${selectedTypes.join(', ')}\n` : ''}Difficulties: ${selectedDifficulties.join(', ')}\nPlease check your database for matching questions.`);
+        return;
+      }
 
     const sanitizeObject = (obj) => {
       const sanitized = {};
@@ -223,7 +329,7 @@ const QuizGeneration = () => {
         marks: q.marks,
       })),
       totalMarks: isMarked ? questions.reduce((sum, q) => sum + q.marks, 0) : null,
-      randomization: { seed: randomSeed, shuffledOrder: true, shuffleOptions: questions.some(q => q.type === 'multiple') },
+      randomization: { seed: newSeed, shuffledOrder: true, shuffleOptions: questions.some(q => q.type === 'multiple') },
       rendering: { respectRTL: selectedSubject === 'Urdu', renderMath: selectedSubject === 'Math' },
       status: 'draft',
       createdBy: 'current_user',
@@ -233,16 +339,17 @@ const QuizGeneration = () => {
       notes: null,
     });
 
-    try {
       await addDoc(collection(db, 'quizzes'), quiz);
       setGeneratedQuiz(quiz);
-      setEditedQuestions(quiz.items);
+      setEditedQuestions(questions);
       setShowEditor(true);
       setShowConfirmModal(false);
       alert(`Quiz '${quizTitle}' created with ${questions.length} questions.`);
     } catch (error) {
       console.error('Error saving quiz:', error);
       alert('Error saving quiz: ' + error.message);
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -270,8 +377,10 @@ const QuizGeneration = () => {
 
   const handleReshuffle = () => {
     if (confirm('Reshuffling will change question selection, order, and MCQ option order. Continue?')) {
-      setRandomSeed(uuidv4());
-      setEditedQuestions(generateQuestions());
+      const newSeed = uuidv4();
+      setRandomSeed(newSeed);
+      const newQuestions = generateQuestions(newSeed);
+      setEditedQuestions(newQuestions);
     }
   };
 
@@ -283,19 +392,35 @@ const QuizGeneration = () => {
       <head>
         <title>${generatedQuiz.title}</title>
         <link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu&display=swap" rel="stylesheet">
+        <script>
+          window.MathJax = {
+            tex: {
+              inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+              displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
+            },
+            startup: {
+              pageReady: () => {
+                return MathJax.startup.defaultPageReady();
+              }
+            }
+          };
+        </script>
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
         <style>
           body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; color: #333; direction: ltr; }
           .header { border-bottom: 3px solid #3b82f6; padding-bottom: 20px; margin-bottom: 30px; }
           .title { font-size: 28px; font-weight: bold; color: #1f2937; text-align: center; margin-bottom: 15px; }
-          .header-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-          .header-table td { padding: 8px; font-size: 14px; color: #6b7280; vertical-align: top; }
-          .header-table .label { font-weight: bold; width: 20%; }
-          .header-table .value { width: 30%; }
-          .name-field { border-bottom: 1px solid #6b7280; min-height: 20px; }
+          .header-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; border: 2px solid #000; }
+          .header-table td { padding: 8px 12px; font-size: 14px; color: #000; vertical-align: middle; border: 1px solid #000; }
+          .header-table .label { font-weight: bold; width: 25%; background-color: #f8f9fa; }
+          .header-table .value { width: 25%; }
+          .name-field { min-height: 20px; }
           .question { margin-bottom: 25px; page-break-inside: avoid; }
-          .question-number { margin-bottom: 8px; overflow: hidden; }
-          .question-number-urdu { font-family: 'Noto Nastaliq Urdu', sans-serif; direction: rtl; text-align: right; float: right; }
-          .question-number-marks { font-family: Arial, sans-serif; direction: ltr; text-align: left; float: left; }
+          .question-number { margin-bottom: 8px; overflow: hidden; display: flex; justify-content: space-between; align-items: center; }
+          .question-number-urdu { font-family: 'Noto Nastaliq Urdu', sans-serif; direction: rtl; text-align: right; font-weight: bold; font-size: 18px; }
+          .question-number-marks { font-family: Arial, sans-serif; direction: ltr; text-align: right; font-weight: bold; }
+          .question-number-marks-urdu { font-family: Arial, sans-serif; direction: ltr; text-align: left; font-weight: bold; }
+          .question-number-english { font-family: Arial, sans-serif; direction: ltr; text-align: left; font-weight: bold; font-size: 18px; }
           .question-text { font-size: 16px; margin-bottom: 12px; font-weight: 500; }
           .options { margin-bottom: 10px; }
           .option { margin-bottom: 5px; font-size: 14px; }
@@ -309,28 +434,34 @@ const QuizGeneration = () => {
           <div class="title">${generatedQuiz.title}</div>
           <table class="header-table">
             <tr>
-              <td class="label">Name:</td>
+              <td class="label">Student Name:</td>
               <td class="value name-field"></td>
+              <td class="label">Student ID:</td>
+              <td class="value name-field"></td>
+            </tr>
+            <tr>
               <td class="label">Class:</td>
               <td class="value">${generatedQuiz.class}</td>
-            </tr>
-            <tr>
               <td class="label">Subject:</td>
               <td class="value">${generatedQuiz.subject}</td>
-              <td class="label">Duration:</td>
-              <td class="value">${generatedQuiz.timeLimitMinutes} minutes</td>
             </tr>
             <tr>
-              <td class="label">Date:</td>
-              <td class="value">${new Date().toLocaleDateString()}</td>
-              <td class="label">Total Questions:</td>
-              <td class="value">${generatedQuiz.totalQuestions}</td>
+              <td class="label">Series:</td>
+              <td class="value name-field"></td>
+              <td class="label">Test Type:</td>
+              <td class="value">${generatedQuiz.quizType || 'Quiz'}</td>
             </tr>
             <tr>
               <td class="label">Total Marks:</td>
               <td class="value">${isMarked ? generatedQuiz.totalMarks : 'N/A'}</td>
-              <td class="label"></td>
-              <td class="value"></td>
+              <td class="label">Total Time:</td>
+              <td class="value">${generatedQuiz.timeLimitMinutes} minutes</td>
+            </tr>
+            <tr>
+              <td class="label">Obtained Marks:</td>
+              <td class="value name-field"></td>
+              <td class="label">Date:</td>
+              <td class="value">${new Date().toLocaleDateString()}</td>
             </tr>
           </table>
         </div>
@@ -338,13 +469,13 @@ const QuizGeneration = () => {
           .map(
             (q, i) => `
               <div class="question">
-                <div class="question-number">
-                  <div class="${q.question.isRTL ? 'question-number-urdu' : ''}">
+                <div class="question-number" ${q.question.isRTL ? 'style="direction: rtl;"' : ''}>
+                  <div class="${q.question.isRTL ? 'question-number-urdu' : 'question-number-english'}">
                     ${q.question.isRTL ? 'سوال ' + toUrduNumber(i + 1) : 'Question ' + (i + 1)}
                   </div>
-                  ${isMarked ? `<div class="question-number-marks">(${q.marks} marks)</div>` : ''}
+                  ${isMarked ? `<div class="${q.question.isRTL ? 'question-number-marks-urdu' : 'question-number-marks'}">(${q.marks} marks)</div>` : ''}
                 </div>
-                <div class="question-text ${q.question.isRTL ? 'urdu' : ''}">${q.question.format === 'math' ? '\\[' + q.question.text + '\\]' : q.question.text}</div>
+                <div class="question-text ${q.question.isRTL ? 'urdu' : ''}">${extractLatexFromFormulas(q.question.text)}</div>
                 ${
                   q.type === 'multiple' && q.options?.length
                     ? `<div class="options ${q.question.isRTL ? 'urdu' : ''}">${q.options
@@ -354,9 +485,12 @@ const QuizGeneration = () => {
                         )
                         .join('')}</div>`
                     : q.type === 'truefalse'
-                    ? `<div class="options ${q.question.isRTL ? 'urdu' : ''}"><div class="option">${q.question.isRTL ? 'صحیح یا غلط' : 'True or False'}</div></div>`
+                    ? `<div class="options ${q.question.isRTL ? 'urdu' : ''}">
+                        <div class="option">${q.question.isRTL ? 'ا' : 'A'}. ${q.question.isRTL ? 'صحیح' : 'True'}</div>
+                        <div class="option">${q.question.isRTL ? 'ب' : 'B'}. ${q.question.isRTL ? 'غلط' : 'False'}</div>
+                      </div>`
                     : q.type === 'fillblanks'
-                    ? `<div class="options ${q.question.isRTL ? 'urdu' : ''}"><div class="option">${q.question.text.replace(/{blank\d+}|___/g, '________')}</div></div>`
+                    ? `<div class="options ${q.question.isRTL ? 'urdu' : ''}"><div class="option">${extractLatexFromFormulas(q.question.text).replace(/{blank\d+}|___/g, '________')}</div></div>`
                     : `<div class="options ${q.question.isRTL ? 'urdu' : ''}"><div class="option">${q.question.isRTL ? 'نیچے اپنا جواب لکھیں۔' : 'Write your answer below.'}</div></div>`
                 }
               </div>
@@ -371,8 +505,26 @@ const QuizGeneration = () => {
     if (newWindow) {
       newWindow.document.write(pdfContent);
       newWindow.document.close();
-      setTimeout(() => newWindow.print(), 1000);
-      setTimeout(() => alert('Quiz PDF ready! Use print dialog to save as PDF.'), 1500);
+      
+      // Wait for MathJax to load and render before printing
+      const checkMathJax = setInterval(() => {
+        if (newWindow.MathJax && newWindow.MathJax.typesetPromise) {
+          clearInterval(checkMathJax);
+          newWindow.MathJax.typesetPromise().then(() => {
+            setTimeout(() => {
+              newWindow.print();
+              alert('Quiz PDF ready! Use print dialog to save as PDF.');
+            }, 500);
+          });
+        }
+      }, 100);
+      
+      // Fallback timeout after 5 seconds
+      setTimeout(() => {
+        clearInterval(checkMathJax);
+        newWindow.print();
+        alert('Quiz PDF ready! Use print dialog to save as PDF.');
+      }, 5000);
     }
   };
 
@@ -384,15 +536,31 @@ const QuizGeneration = () => {
       <head>
         <title>${generatedQuiz.title} - Answer Key</title>
         <link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu&display=swap" rel="stylesheet">
+        <script>
+          window.MathJax = {
+            tex: {
+              inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+              displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
+            },
+            startup: {
+              pageReady: () => {
+                return MathJax.startup.defaultPageReady();
+              }
+            }
+          };
+        </script>
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
         <style>
           body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; color: #333; direction: ltr; }
           .header { border-bottom: 3px solid #3b82f6; padding-bottom: 20px; margin-bottom: 30px; }
           .title { font-size: 28px; font-weight: bold; color: #1f2937; margin-bottom: 10px; }
           .info { font-size: 14px; color: #6b7280; margin-bottom: 5px; }
           .answer { margin-bottom: 20px; }
-          .answer-number { margin-bottom: 8px; overflow: hidden; }
-          .answer-number-urdu { font-family: 'Noto Nastaliq Urdu', sans-serif; direction: rtl; text-align: right; float: right; }
-          .answer-number-marks { font-family: Arial, sans-serif; direction: ltr; text-align: left; float: left; }
+          .answer-number { margin-bottom: 8px; overflow: hidden; display: flex; justify-content: space-between; align-items: center; }
+          .answer-number-urdu { font-family: 'Noto Nastaliq Urdu', sans-serif; direction: rtl; text-align: right; font-weight: bold; font-size: 18px; }
+          .answer-number-marks { font-family: Arial, sans-serif; direction: ltr; text-align: right; font-weight: bold; }
+          .answer-number-marks-urdu { font-family: Arial, sans-serif; direction: ltr; text-align: left; font-weight: bold; }
+          .answer-number-english { font-family: Arial, sans-serif; direction: ltr; text-align: left; font-weight: bold; font-size: 18px; }
           .answer-text { font-size: 16px; margin-bottom: 12px; }
           .urdu { font-family: 'Noto Nastaliq Urdu', sans-serif; direction: rtl; text-align: right; }
           @media print { body { margin: 20px; } }
@@ -410,13 +578,13 @@ const QuizGeneration = () => {
           .map(
             (q, i) => `
               <div class="answer">
-                <div class="answer-number">
-                  <div class="${q.question.isRTL ? 'answer-number-urdu' : ''}">
+                <div class="answer-number" ${q.question.isRTL ? 'style="direction: rtl;"' : ''}>
+                  <div class="${q.question.isRTL ? 'answer-number-urdu' : 'answer-number-english'}">
                     ${q.question.isRTL ? 'سوال ' + toUrduNumber(i + 1) : 'Question ' + (i + 1)}
                   </div>
-                  ${isMarked ? `<div class="answer-number-marks">(${q.marks} marks)</div>` : ''}
+                  ${isMarked ? `<div class="${q.question.isRTL ? 'answer-number-marks-urdu' : 'answer-number-marks'}">(${q.marks} marks)</div>` : ''}
                 </div>
-                <div class="answer-text ${q.question.isRTL ? 'urdu' : ''}">${q.question.format === 'math' ? '\\[' + q.question.text + '\\]' : q.question.text}</div>
+                <div class="answer-text ${q.question.isRTL ? 'urdu' : ''}">${extractLatexFromFormulas(q.question.text)}</div>
                 <div class="answer-text"><strong>Answer:</strong> ${
                   q.type === 'multiple' && q.options?.length
                     ? `${q.question.isRTL ? optionLabels(true)[q.answer.value] : String.fromCharCode(65 + q.answer.value)}. ${q.options[q.answer.value]?.text || q.answer.text}`
@@ -445,17 +613,46 @@ const QuizGeneration = () => {
     if (newWindow) {
       newWindow.document.write(answerKeyContent);
       newWindow.document.close();
-      setTimeout(() => newWindow.print(), 1000);
-      setTimeout(() => alert('Answer Key ready! Use print dialog to save as PDF.'), 1500);
+      
+      // Wait for MathJax to load and render before printing
+      const checkMathJax = setInterval(() => {
+        if (newWindow.MathJax && newWindow.MathJax.typesetPromise) {
+          clearInterval(checkMathJax);
+          newWindow.MathJax.typesetPromise().then(() => {
+            setTimeout(() => {
+              newWindow.print();
+              alert('Answer Key ready! Use print dialog to save as PDF.');
+            }, 500);
+          });
+        }
+      }, 100);
+      
+      // Fallback timeout after 5 seconds
+      setTimeout(() => {
+        clearInterval(checkMathJax);
+        newWindow.print();
+        alert('Answer Key ready! Use print dialog to save as PDF.');
+      }, 5000);
     }
   };
 
   const downloadQuizWord = async () => {
     if (!generatedQuiz) return;
     try {
-      const docxModule = await docx;
-      const { Document, Packer, Paragraph, TextRun, Header, Footer } = docxModule;
-      const AlignmentType = docxModule.AlignmentType || {};
+      const docxModule = await import('docx');
+      const { Document, Packer, Paragraph, TextRun, Header, Footer, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } = docxModule;
+      
+      // Alternative download function if file-saver doesn't work
+      const downloadBlob = (blob: Blob, filename: string) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      };
 
       const doc = new Document({
         sections: [{
@@ -465,7 +662,7 @@ const QuizGeneration = () => {
               children: [
                 new Paragraph({
                   children: [new TextRun({ text: generatedQuiz.title, size: 32, font: 'Arial', bold: true })],
-                  alignment: AlignmentType.LEFT || 'left',
+                  alignment: AlignmentType.LEFT,
                   spacing: { after: 200 },
                 }),
               ],
@@ -476,85 +673,253 @@ const QuizGeneration = () => {
               children: [
                 new Paragraph({
                   children: [new TextRun({ text: `Generated: ${new Date().toLocaleString()}`, size: 20, font: 'Arial' })],
-                  alignment: AlignmentType.CENTER || 'center',
+                  alignment: AlignmentType.CENTER,
                   spacing: { before: 200 },
                 }),
               ],
             }),
           },
           children: [
-            new Paragraph({
-              children: [new TextRun({ text: `Grade: ${generatedQuiz.class}`, size: 24, font: 'Arial' })],
-              alignment: AlignmentType.LEFT || 'left',
-              spacing: { after: 100 },
+            // Comprehensive Header Table
+            new Table({
+              width: {
+                size: 100,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 1 },
+                bottom: { style: BorderStyle.SINGLE, size: 1 },
+                left: { style: BorderStyle.SINGLE, size: 1 },
+                right: { style: BorderStyle.SINGLE, size: 1 },
+                insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
+                insideVertical: { style: BorderStyle.SINGLE, size: 1 },
+              },
+              rows: [
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: 'Student Name:', bold: true, size: 20 })] })],
+                      width: { size: 25, type: WidthType.PERCENTAGE },
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: '____________________', size: 20 })] })],
+                      width: { size: 25, type: WidthType.PERCENTAGE },
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: 'Student ID:', bold: true, size: 20 })] })],
+                      width: { size: 25, type: WidthType.PERCENTAGE },
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: '____________________', size: 20 })] })],
+                      width: { size: 25, type: WidthType.PERCENTAGE },
+                    }),
+                  ],
+                }),
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: 'Class:', bold: true, size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: generatedQuiz.class, size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: 'Subject:', bold: true, size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: generatedQuiz.subject, size: 20 })] })],
+                    }),
+                  ],
+                }),
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: 'Series:', bold: true, size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: '____________________', size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: 'Test Type:', bold: true, size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: generatedQuiz.quizType || 'Quiz', size: 20 })] })],
+                    }),
+                  ],
+                }),
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: 'Total Marks:', bold: true, size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: isMarked ? generatedQuiz.totalMarks.toString() : 'N/A', size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: 'Total Time:', bold: true, size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: `${generatedQuiz.timeLimitMinutes} minutes`, size: 20 })] })],
+                    }),
+                  ],
+                }),
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: 'Obtained Marks:', bold: true, size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: '____________________', size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: 'Date:', bold: true, size: 20 })] })],
+                    }),
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: new Date().toLocaleDateString(), size: 20 })] })],
+                    }),
+                  ],
+                }),
+              ],
             }),
+            // Add spacing after header table
             new Paragraph({
-              children: [new TextRun({ text: `Subject: ${generatedQuiz.subject}`, size: 24, font: 'Arial' })],
-              alignment: AlignmentType.LEFT || 'left',
-              spacing: { after: 100 },
+              children: [new TextRun({ text: '', size: 20 })],
+              spacing: { after: 400 },
             }),
-            new Paragraph({
-              children: [new TextRun({ text: `Total Questions: ${generatedQuiz.totalQuestions}`, size: 24, font: 'Arial' })],
-              alignment: AlignmentType.LEFT || 'left',
-              spacing: { after: 100 },
-            }),
-            ...(isMarked
-              ? [
-                  new Paragraph({
-                    children: [new TextRun({ text: `Total Marks: ${generatedQuiz.totalMarks}`, size: 24, font: 'Arial' })],
-                    alignment: AlignmentType.LEFT || 'left',
-                    spacing: { after: 200 },
-                  }),
-                ]
-              : []),
             ...editedQuestions.flatMap((q, i) => [
+              // Question Header with proper marks positioning
+              ...(isMarked ? [
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: q.question.isRTL ? [
+                        // For RTL (Urdu): Marks on left, Question number on right
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: `(${q.marks} marks)`, 
+                                  size: 24, 
+                                  font: 'Arial',
+                                  bold: true 
+                                })
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            })
+                          ],
+                          width: { size: 30, type: WidthType.PERCENTAGE },
+                          borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: `سوال نمبر ${toUrduNumber(i + 1)} :`, 
+                                  size: 24, 
+                                  font: 'Noto Nastaliq Urdu',
+                                  bold: true 
+                                })
+                              ],
+                              alignment: AlignmentType.RIGHT,
+                            })
+                          ],
+                          width: { size: 70, type: WidthType.PERCENTAGE },
+                          borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+                        }),
+                      ] : [
+                        // For LTR (English): Question number on left, Marks on right
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: `Question ${i + 1}:`, 
+                                  size: 24, 
+                                  font: 'Arial',
+                                  bold: true 
+                                })
+                              ],
+                              alignment: AlignmentType.LEFT,
+                            })
+                          ],
+                          width: { size: 70, type: WidthType.PERCENTAGE },
+                          borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+                        }),
+                        new TableCell({
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ 
+                                  text: `(${q.marks} marks)`, 
+                                  size: 24, 
+                                  font: 'Arial',
+                                  bold: true 
+                                })
+                              ],
+                              alignment: AlignmentType.RIGHT,
+                            })
+                          ],
+                          width: { size: 30, type: WidthType.PERCENTAGE },
+                          borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+                        }),
+                      ],
+                    }),
+                  ],
+                  borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } },
+                }),
+              ] : [
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: q.question.isRTL ? `سوال نمبر ${toUrduNumber(i + 1)} :` : `Question ${i + 1}:`, 
+                      size: 24, 
+                      font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial',
+                      bold: true 
+                    })
+                  ],
+                  heading: 'Heading2',
+                  alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
+                  spacing: { before: 200, after: 100 },
+                }),
+              ]),
               new Paragraph({
-                children: [
-                  new TextRun({ 
-                    text: q.question.isRTL ? `سوال ${toUrduNumber(i + 1)}` : `Question ${i + 1}`, 
-                    size: 24, 
-                    font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial',
-                    bold: true 
-                  }),
-                  ...(isMarked ? [new TextRun({ 
-                    text: ` (${q.marks} marks)`, 
-                    size: 24, 
-                    font: 'Arial',
-                    bold: true 
-                  })] : []),
-                ],
-                heading: 'Heading2',
-                alignment: q.question.isRTL ? (AlignmentType.RIGHT || 'right') : (AlignmentType.LEFT || 'left'),
-                spacing: { before: 200, after: 100 },
-              }),
-              new Paragraph({
-                children: [new TextRun({ text: q.question.text, size: 24, font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' })],
-                alignment: q.question.isRTL ? (AlignmentType.RIGHT || 'right') : (AlignmentType.LEFT || 'left'),
+                children: [new TextRun({ text: extractLatexFromFormulas(q.question.text), size: 24, font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' })],
+                alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
                 spacing: { after: 100 },
               }),
               ...(q.type === 'multiple' && q.options?.length
-                ? q.options.map((opt, j) => ({
-                    children: [
+                ? q.options.map((opt, j) => 
                       new Paragraph({
                         children: [new TextRun({ 
                           text: `${q.question.isRTL ? optionLabels(true)[j] : String.fromCharCode(65 + j)}. ${opt.text}`, 
                           size: 24, 
                           font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' 
                         })],
-                        alignment: q.question.isRTL ? (AlignmentType.RIGHT || 'right') : (AlignmentType.LEFT || 'left'),
+                        alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
                         spacing: { after: 50 },
-                      }),
-                    ],
-                  }))
+                      })
+                  )
                 : q.type === 'truefalse'
                 ? [
                     new Paragraph({
                       children: [new TextRun({ 
-                        text: q.question.isRTL ? 'صحیح یا غلط' : 'True or False', 
+                        text: `${q.question.isRTL ? 'ا' : 'A'}. ${q.question.isRTL ? 'صحیح' : 'True'}`, 
                         size: 24, 
                         font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' 
                       })],
-                      alignment: q.question.isRTL ? (AlignmentType.RIGHT || 'right') : (AlignmentType.LEFT || 'left'),
+                      alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
+                      spacing: { after: 50 },
+                    }),
+                    new Paragraph({
+                      children: [new TextRun({ 
+                        text: `${q.question.isRTL ? 'ب' : 'B'}. ${q.question.isRTL ? 'غلط' : 'False'}`, 
+                        size: 24, 
+                        font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' 
+                      })],
+                      alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
                       spacing: { after: 50 },
                     }),
                   ]
@@ -562,11 +927,11 @@ const QuizGeneration = () => {
                 ? [
                     new Paragraph({
                       children: [new TextRun({ 
-                        text: q.question.text.replace(/{blank\d+}|___/g, '________'), 
+                        text: extractLatexFromFormulas(q.question.text).replace(/{blank\d+}|___/g, '________'), 
                         size: 24, 
                         font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' 
                       })],
-                      alignment: q.question.isRTL ? (AlignmentType.RIGHT || 'right') : (AlignmentType.LEFT || 'left'),
+                      alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
                       spacing: { after: 50 },
                     }),
                   ]
@@ -577,18 +942,18 @@ const QuizGeneration = () => {
                         size: 24, 
                         font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' 
                       })],
-                      alignment: q.question.isRTL ? (AlignmentType.RIGHT || 'right') : (AlignmentType.LEFT || 'left'),
+                      alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
                       spacing: { after: 50 },
                     }),
                   ]),
-              ...(i < editedQuestions.length - 1 && (i + 1) % 5 === 0 ? [{ children: [new Paragraph({ pageBreakBefore: true })] }] : []),
+              ...(i < editedQuestions.length - 1 && (i + 1) % 5 === 0 ? [new Paragraph({ pageBreakBefore: true })] : []),
             ]).flat(),
           ],
         }],
       });
 
       const blob = await Packer.toBlob(doc);
-      saveAs(blob, `${generatedQuiz.title}.docx`);
+      downloadBlob(blob, `${generatedQuiz.title}.docx`);
       alert('Quiz Word document downloaded!');
     } catch (error) {
       console.error('Error generating Word document:', error);
@@ -832,9 +1197,16 @@ const QuizGeneration = () => {
                   </button>
                   <button
                     onClick={confirmGenerateQuiz}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+                    disabled={isGenerating}
+                    className={`px-4 py-2 rounded-lg ${isGenerating ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white flex items-center space-x-2`}
                   >
-                    Confirm & Generate
+                    {isGenerating && (
+                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    )}
+                    <span>{isGenerating ? 'Generating Quiz...' : 'Confirm & Generate'}</span>
                   </button>
                 </div>
               </div>
@@ -877,7 +1249,7 @@ const QuizGeneration = () => {
                       </div>
                       <MathJax dynamic>
                         <textarea
-                          value={q.question.text}
+                          value={convertFormulasToReadable(q.question.text)}
                           onChange={e => handleEditQuestion(index, 'question', { ...q.question, text: e.target.value })}
                           className={`w-full p-2 border rounded mt-2 ${q.question.isRTL ? 'text-right font-noto-nastaliq' : ''}`}
                           dir={q.question.isRTL ? 'rtl' : 'ltr'}

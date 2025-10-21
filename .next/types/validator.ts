@@ -36,117 +36,117 @@ type LayoutConfig<Route extends LayoutRoutes = LayoutRoutes> = {
 }
 
 
-// Validate ../app/admin/dashboard/page.tsx
+// Validate ../../app/admin/dashboard/page.tsx
 {
-  const handler = {} as typeof import("../app/admin/dashboard/page.js")
+  const handler = {} as typeof import("../../app/admin/dashboard/page.js")
   handler satisfies AppPageConfig<"/admin/dashboard">
 }
 
-// Validate ../app/admin/monitoring/page.tsx
+// Validate ../../app/admin/monitoring/page.tsx
 {
-  const handler = {} as typeof import("../app/admin/monitoring/page.js")
+  const handler = {} as typeof import("../../app/admin/monitoring/page.js")
   handler satisfies AppPageConfig<"/admin/monitoring">
 }
 
-// Validate ../app/admin/organization/page.tsx
+// Validate ../../app/admin/organization/page.tsx
 {
-  const handler = {} as typeof import("../app/admin/organization/page.js")
+  const handler = {} as typeof import("../../app/admin/organization/page.js")
   handler satisfies AppPageConfig<"/admin/organization">
 }
 
-// Validate ../app/admin/profile/page.tsx
+// Validate ../../app/admin/profile/page.tsx
 {
-  const handler = {} as typeof import("../app/admin/profile/page.js")
+  const handler = {} as typeof import("../../app/admin/profile/page.js")
   handler satisfies AppPageConfig<"/admin/profile">
 }
 
-// Validate ../app/admin/users/page.tsx
+// Validate ../../app/admin/users/page.tsx
 {
-  const handler = {} as typeof import("../app/admin/users/page.js")
+  const handler = {} as typeof import("../../app/admin/users/page.js")
   handler satisfies AppPageConfig<"/admin/users">
 }
 
-// Validate ../app/login/page.tsx
+// Validate ../../app/login/page.tsx
 {
-  const handler = {} as typeof import("../app/login/page.js")
+  const handler = {} as typeof import("../../app/login/page.js")
   handler satisfies AppPageConfig<"/login">
 }
 
-// Validate ../app/page.tsx
+// Validate ../../app/page.tsx
 {
-  const handler = {} as typeof import("../app/page.js")
+  const handler = {} as typeof import("../../app/page.js")
   handler satisfies AppPageConfig<"/">
 }
 
-// Validate ../app/student/dashboard/page.tsx
+// Validate ../../app/student/dashboard/page.tsx
 {
-  const handler = {} as typeof import("../app/student/dashboard/page.js")
+  const handler = {} as typeof import("../../app/student/dashboard/page.js")
   handler satisfies AppPageConfig<"/student/dashboard">
 }
 
-// Validate ../app/student/favorites/page.tsx
+// Validate ../../app/student/favorites/page.tsx
 {
-  const handler = {} as typeof import("../app/student/favorites/page.js")
+  const handler = {} as typeof import("../../app/student/favorites/page.js")
   handler satisfies AppPageConfig<"/student/favorites">
 }
 
-// Validate ../app/student/history/page.tsx
+// Validate ../../app/student/history/page.tsx
 {
-  const handler = {} as typeof import("../app/student/history/page.js")
+  const handler = {} as typeof import("../../app/student/history/page.js")
   handler satisfies AppPageConfig<"/student/history">
 }
 
-// Validate ../app/student/notifications/page.tsx
+// Validate ../../app/student/notifications/page.tsx
 {
-  const handler = {} as typeof import("../app/student/notifications/page.js")
+  const handler = {} as typeof import("../../app/student/notifications/page.js")
   handler satisfies AppPageConfig<"/student/notifications">
 }
 
-// Validate ../app/student/profile/page.tsx
+// Validate ../../app/student/profile/page.tsx
 {
-  const handler = {} as typeof import("../app/student/profile/page.js")
+  const handler = {} as typeof import("../../app/student/profile/page.js")
   handler satisfies AppPageConfig<"/student/profile">
 }
 
-// Validate ../app/student/quiz/page.tsx
+// Validate ../../app/student/quiz/page.tsx
 {
-  const handler = {} as typeof import("../app/student/quiz/page.js")
+  const handler = {} as typeof import("../../app/student/quiz/page.js")
   handler satisfies AppPageConfig<"/student/quiz">
 }
 
-// Validate ../app/teacher/books/page.tsx
+// Validate ../../app/teacher/books/page.tsx
 {
-  const handler = {} as typeof import("../app/teacher/books/page.js")
+  const handler = {} as typeof import("../../app/teacher/books/page.js")
   handler satisfies AppPageConfig<"/teacher/books">
 }
 
-// Validate ../app/teacher/dashboard/page.tsx
+// Validate ../../app/teacher/dashboard/page.tsx
 {
-  const handler = {} as typeof import("../app/teacher/dashboard/page.js")
+  const handler = {} as typeof import("../../app/teacher/dashboard/page.js")
   handler satisfies AppPageConfig<"/teacher/dashboard">
 }
 
-// Validate ../app/teacher/interactiveQuiz/page.tsx
+// Validate ../../app/teacher/interactiveQuiz/page.tsx
 {
-  const handler = {} as typeof import("../app/teacher/interactiveQuiz/page.js")
+  const handler = {} as typeof import("../../app/teacher/interactiveQuiz/page.js")
   handler satisfies AppPageConfig<"/teacher/interactiveQuiz">
 }
 
-// Validate ../app/teacher/profile/page.tsx
+// Validate ../../app/teacher/profile/page.tsx
 {
-  const handler = {} as typeof import("../app/teacher/profile/page.js")
+  const handler = {} as typeof import("../../app/teacher/profile/page.js")
   handler satisfies AppPageConfig<"/teacher/profile">
 }
 
-// Validate ../app/teacher/questions/page.tsx
+// Validate ../../app/teacher/questions/page.tsx
 {
-  const handler = {} as typeof import("../app/teacher/questions/page.js")
+  const handler = {} as typeof import("../../app/teacher/questions/page.js")
   handler satisfies AppPageConfig<"/teacher/questions">
 }
 
-// Validate ../app/teacher/quiz/page.tsx
+// Validate ../../app/teacher/quiz/page.tsx
 {
-  const handler = {} as typeof import("../app/teacher/quiz/page.js")
+  const handler = {} as typeof import("../../app/teacher/quiz/page.js")
   handler satisfies AppPageConfig<"/teacher/quiz">
 }
 
@@ -156,8 +156,8 @@ type LayoutConfig<Route extends LayoutRoutes = LayoutRoutes> = {
 
 
 
-// Validate ../app/layout.tsx
+// Validate ../../app/layout.tsx
 {
-  const handler = {} as typeof import("../app/layout.js")
+  const handler = {} as typeof import("../../app/layout.js")
   handler satisfies LayoutConfig<"/">
 }
