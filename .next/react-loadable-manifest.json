@@ -1,4 +1,10 @@
 {
+  "app/teacher/questions/page.tsx -> react-simple-keyboard": {
+    "id": "app/teacher/questions/page.tsx -> react-simple-keyboard",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_react-simple-keyboard_build_index_js.js"
+    ]
+  },
   "app/teacher/quiz/page.tsx -> docx": {
     "id": "app/teacher/quiz/page.tsx -> docx",
     "files": [

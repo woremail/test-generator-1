@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/firebase/firebase';
-import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import Sidebar from '@/components/Sidebar';
 import { v4 as uuidv4 } from 'uuid';
 import { MathJax, MathJaxContext } from 'better-react-mathjax';
@@ -26,29 +26,118 @@ const toUrduNumber = (num) => {
 const latexToReadable = (latex) => {
   let readable = latex;
   
-  // Convert common LaTeX to Unicode/readable symbols
-  readable = readable.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
-  readable = readable.replace(/\^2/g, '²');
-  readable = readable.replace(/\^3/g, '³');
+  // Remove \left and \right delimiters
+  readable = readable.replace(/\\left/g, '');
+  readable = readable.replace(/\\right/g, '');
+  
+  // Trigonometric and common functions
+  readable = readable.replace(/\\sin/g, 'sin');
+  readable = readable.replace(/\\cos/g, 'cos');
+  readable = readable.replace(/\\tan/g, 'tan');
+  readable = readable.replace(/\\log/g, 'log');
+  readable = readable.replace(/\\ln/g, 'ln');
+  readable = readable.replace(/\\exp/g, 'exp');
+  
+  // Convert fractions (with and without braces)
+  readable = readable.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1/$2)');
+  
+  // Convert sqrt with braces
+  readable = readable.replace(/\\sqrt\{([^{}]+)\}/g, '√($1)');
+  
+  // Convert sqrt without braces (followed by word characters or expressions)
+  readable = readable.replace(/\\sqrt([a-zA-Z0-9²³⁰¹⁴⁵⁶⁷⁸⁹]+)/g, '√$1');
+  
+  // Handle superscripts with braces ^{...}
+  readable = readable.replace(/\^\{([^{}]+)\}/g, (match, content) => {
+    // Convert single digits to Unicode superscripts
+    if (/^[0-9]$/.test(content)) {
+      const superscripts = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+      return superscripts[content] || '^' + content;
+    }
+    return '^(' + content + ')';
+  });
+  
+  // Handle bare superscripts
   readable = readable.replace(/\^([0-9])/g, (match, num) => {
     const superscripts = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
     return superscripts[num] || '^' + num;
   });
-  readable = readable.replace(/\\sqrt\{([^}]+)\}/g, '√($1)');
+  
+  // Handle subscripts with braces _{...}
+  readable = readable.replace(/_\{([^{}]+)\}/g, (match, content) => {
+    // Convert single digits to Unicode subscripts
+    if (/^[0-9]$/.test(content)) {
+      const subscripts = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
+      return subscripts[content] || '_' + content;
+    }
+    return '_(' + content + ')';
+  });
+  
+  // Handle bare subscripts
+  readable = readable.replace(/_([0-9a-zA-Z])/g, (match, char) => {
+    if (/[0-9]/.test(char)) {
+      const subscripts = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
+      return subscripts[char] || '_' + char;
+    }
+    return '_' + char;
+  });
+  
+  // Greek letters
   readable = readable.replace(/\\pi/g, 'π');
   readable = readable.replace(/\\alpha/g, 'α');
   readable = readable.replace(/\\beta/g, 'β');
+  readable = readable.replace(/\\gamma/g, 'γ');
+  readable = readable.replace(/\\delta/g, 'δ');
+  readable = readable.replace(/\\epsilon/g, 'ε');
   readable = readable.replace(/\\theta/g, 'θ');
+  readable = readable.replace(/\\lambda/g, 'λ');
+  readable = readable.replace(/\\mu/g, 'μ');
+  readable = readable.replace(/\\sigma/g, 'σ');
+  readable = readable.replace(/\\omega/g, 'ω');
+  
+  // Math operators and symbols
   readable = readable.replace(/\\sum/g, 'Σ');
   readable = readable.replace(/\\int/g, '∫');
   readable = readable.replace(/\\infty/g, '∞');
+  readable = readable.replace(/\\partial/g, '∂');
+  readable = readable.replace(/\\nabla/g, '∇');
+  readable = readable.replace(/\\cdots/g, '⋯');
+  readable = readable.replace(/\\ldots/g, '…');
+  
+  // Comparison and relation symbols
   readable = readable.replace(/\\leq/g, '≤');
   readable = readable.replace(/\\geq/g, '≥');
   readable = readable.replace(/\\neq/g, '≠');
+  readable = readable.replace(/\\approx/g, '≈');
+  readable = readable.replace(/\\equiv/g, '≡');
+  readable = readable.replace(/\\in/g, '∈');
+  readable = readable.replace(/\\subset/g, '⊂');
+  readable = readable.replace(/\\cup/g, '∪');
+  readable = readable.replace(/\\cap/g, '∩');
+  
+  // Binary operators
   readable = readable.replace(/\\pm/g, '±');
   readable = readable.replace(/\\times/g, '×');
   readable = readable.replace(/\\div/g, '÷');
   readable = readable.replace(/\\cdot/g, '·');
+  
+  // Arrows
+  readable = readable.replace(/\\rightarrow/g, '→');
+  readable = readable.replace(/\\leftarrow/g, '←');
+  readable = readable.replace(/\\leftrightarrow/g, '↔');
+  readable = readable.replace(/\\Rightarrow/g, '⇒');
+  
+  // Logic symbols
+  readable = readable.replace(/\\forall/g, '∀');
+  readable = readable.replace(/\\exists/g, '∃');
+  
+  // Clean up remaining LaTeX syntax
+  readable = readable.replace(/\\text\{([^{}]+)\}/g, '$1');
+  readable = readable.replace(/\\mathrm\{([^{}]+)\}/g, '$1');
+  readable = readable.replace(/\\mathbf\{([^{}]+)\}/g, '$1');
+  readable = readable.replace(/\\\\/g, '');
+  readable = readable.replace(/\{/g, '');
+  readable = readable.replace(/\}/g, '');
   
   return readable;
 };
@@ -90,10 +179,10 @@ const extractLatexFromFormulas = (text) => {
 const convertFormulasToReadable = (text) => {
   if (!text || typeof text !== 'string') return text;
   
-  // Handle formulas with nested braces by counting brace balance
   let result = text;
-  let index = 0;
   
+  // First, handle legacy {formula:...} format
+  let index = 0;
   while (index < result.length) {
     const formulaStart = result.indexOf('{formula:', index);
     if (formulaStart === -1) break;
@@ -118,14 +207,33 @@ const convertFormulasToReadable = (text) => {
     }
   }
   
+  // Handle display math $$...$$ format (before inline to avoid conflicts)
+  result = result.replace(/\$\$([^$]+)\$\$/g, (match, latex) => {
+    return latexToReadable(latex);
+  });
+  
+  // Handle inline math $...$ format
+  result = result.replace(/\$([^$]+)\$/g, (match, latex) => {
+    return latexToReadable(latex);
+  });
+  
   return result;
 };
 
 const QuizGeneration = () => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
-  const [questionTypes, setQuestionTypes] = useState({ multiple: false, truefalse: false, short: false, long: false, fillblanks: false });
-  const [difficultyLevels, setDifficultyLevels] = useState({ Easy: false, Medium: false, Hard: false });
+  const [selectedBook, setSelectedBook] = useState('');
+  const [selectedChapters, setSelectedChapters] = useState([]);
+  const [selectedSLOs, setSelectedSLOs] = useState([]);
+  const [questionConfig, setQuestionConfig] = useState({
+    multiple: { count: 0, difficulties: ['Easy', 'Medium', 'Hard'], marks: 1 },
+    truefalse: { count: 0, difficulties: ['Easy', 'Medium', 'Hard'], marks: 1 },
+    short: { count: 0, difficulties: ['Easy', 'Medium', 'Hard'], marks: 2 },
+    long: { count: 0, difficulties: ['Easy', 'Medium', 'Hard'], marks: 5 },
+    fillblanks: { count: 0, difficulties: ['Easy', 'Medium', 'Hard'], marks: 1 }
+  });
   const [totalQuestions, setTotalQuestions] = useState(20);
   const [timeLimit, setTimeLimit] = useState(30);
   const [scheduledStart, setScheduledStart] = useState('');
@@ -144,6 +252,13 @@ const QuizGeneration = () => {
 
   const grades = ['1', '2', '3', '4', '5'];
   const subjects = ['English', 'Math', 'Urdu', 'Science', 'Computer'];
+  const books = {
+    '1': { 'English': ['Oxford First Words', 'Primary English 1'], 'Math': ['Math Magic 1'], 'Urdu': ['Urdu Qaida'], 'Science': ['My First Science'], 'Computer': ['ICT Basics 1'] },
+    '2': { 'English': ['Oxford Growing Up', 'Primary English 2'], 'Math': ['Math Magic 2'], 'Urdu': ['Urdu Adab 2'], 'Science': ['Science Explorer 2'], 'Computer': ['ICT Basics 2'] },
+    '3': { 'English': ['Oxford Advantage', 'Primary English 3'], 'Math': ['Math Magic 3'], 'Urdu': ['Urdu Adab 3'], 'Science': ['Science Explorer 3'], 'Computer': ['Computer Studies 3'] },
+    '4': { 'English': ['Spirit School', 'Primary English 4'], 'Math': ['Primary Mathematics'], 'Urdu': ['Urdu Say Dosti'], 'Science': ['Science World 4'], 'Computer': ['Computer Studies 4'] },
+    '5': { 'English': ['English World', 'Oxford Skills'], 'Math': ['New Math 5'], 'Urdu': ['Urdu Bahar 5'], 'Science': ['Exploring Science 5'], 'Computer': ['Digital World 5'] },
+  };
   const quizTypes = ['Weekly', 'Monthly', 'Half Yearly', 'Final Exam', 'Other'];
   const maxQuestions = 200;
   const maxTimeLimit = 300;
@@ -164,102 +279,203 @@ const QuizGeneration = () => {
     fetchQuestions();
   }, []);
 
-  const filterQuestions = useCallback(() => questions.filter(q => {
-    const qGrade = q.grade || q.class || '';
-    const qSubject = q.subject || '';
-    const qType = (q.type || q.questionType || '').toLowerCase();
-    const qDifficulty = q.difficulty || '';
+  // Reset question configuration when grade/subject/book changes
+  useEffect(() => {
+    setQuestionConfig({
+      multiple: { count: 0, difficulties: ['Easy', 'Medium', 'Hard'], marks: 1 },
+      truefalse: { count: 0, difficulties: ['Easy', 'Medium', 'Hard'], marks: 1 },
+      short: { count: 0, difficulties: ['Easy', 'Medium', 'Hard'], marks: 2 },
+      long: { count: 0, difficulties: ['Easy', 'Medium', 'Hard'], marks: 5 },
+      fillblanks: { count: 0, difficulties: ['Easy', 'Medium', 'Hard'], marks: 1 }
+    });
+    setSelectedChapters([]);
+    setSelectedSLOs([]);
+  }, [selectedGrade, selectedSubject, selectedBook]);
 
-    const gradeMatch = !selectedGrade || qGrade.toString().toLowerCase() === selectedGrade.toLowerCase();
-    const subjectMatch = !selectedSubject || qSubject.toLowerCase() === selectedSubject.toLowerCase();
-    const typeMatch = !hasQuestionType || questionTypes[qType === 'mcqs' || qType === 'multiple' ? 'multiple' : qType.replace('_', '')] || false;
-    const difficultyMatch = !difficultyLevels[qDifficulty] && !difficultyLevels[qDifficulty.charAt(0).toUpperCase() + qDifficulty.slice(1).toLowerCase()] ? false : true;
+  // Sync settings state when editor opens with an existing quiz
+  useEffect(() => {
+    if (showEditor && generatedQuiz) {
+      // Set time limit or default to 30
+      setTimeLimit(generatedQuiz.timeLimitMinutes || 30);
+      
+      // Set scheduled start or reset to empty
+      if (generatedQuiz.schedule?.startAt) {
+        const startDate = generatedQuiz.schedule.startAt.toDate ? generatedQuiz.schedule.startAt.toDate() : new Date(generatedQuiz.schedule.startAt);
+        const localStart = new Date(startDate.getTime() - startDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        setScheduledStart(localStart);
+      } else {
+        setScheduledStart('');
+      }
+      
+      // Set scheduled end or reset to empty
+      if (generatedQuiz.schedule?.endAt) {
+        const endDate = generatedQuiz.schedule.endAt.toDate ? generatedQuiz.schedule.endAt.toDate() : new Date(generatedQuiz.schedule.endAt);
+        const localEnd = new Date(endDate.getTime() - endDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        setScheduledEnd(localEnd);
+      } else {
+        setScheduledEnd('');
+      }
+    }
+  }, [showEditor, generatedQuiz]);
 
-    return gradeMatch && subjectMatch && typeMatch && difficultyMatch;
-  }), [questions, selectedGrade, selectedSubject, questionTypes, difficultyLevels, hasQuestionType]);
+  const getAvailableChapters = useCallback(() => {
+    if (!selectedGrade || !selectedSubject || !selectedBook) return [];
+    const chapters = new Set();
+    questions.forEach(q => {
+      const qGrade = (q.grade || q.class || '').toString().toLowerCase();
+      const qSubject = (q.subject || '').toLowerCase();
+      const qBook = (q.book || '').toLowerCase();
+      const qChapter = q.chapter || '';
+      if (qGrade === selectedGrade.toLowerCase() && 
+          qSubject === selectedSubject.toLowerCase() && 
+          qBook === selectedBook.toLowerCase() && 
+          qChapter) {
+        chapters.add(qChapter);
+      }
+    });
+    return Array.from(chapters).sort();
+  }, [questions, selectedGrade, selectedSubject, selectedBook]);
 
-  const getTotalAvailableQuestions = useCallback(() => filterQuestions().length, [filterQuestions]);
+  const getAvailableSLOs = useCallback(() => {
+    if (!selectedGrade || !selectedSubject || !selectedBook || selectedChapters.length === 0) return [];
+    const slos = new Set();
+    questions.forEach(q => {
+      const qGrade = (q.grade || q.class || '').toString().toLowerCase();
+      const qSubject = (q.subject || '').toLowerCase();
+      const qBook = (q.book || '').toLowerCase();
+      const qChapter = q.chapter || '';
+      const qSLO = q.slo || '';
+      if (qGrade === selectedGrade.toLowerCase() && 
+          qSubject === selectedSubject.toLowerCase() && 
+          qBook === selectedBook.toLowerCase() && 
+          selectedChapters.includes(qChapter) && 
+          qSLO) {
+        slos.add(qSLO);
+      }
+    });
+    return Array.from(slos).sort();
+  }, [questions, selectedGrade, selectedSubject, selectedBook, selectedChapters]);
+
+  const getQuestionCountByType = useCallback((type) => {
+    if (!selectedGrade || !selectedSubject || !selectedBook) return 0;
+    const selectedDifficulties = questionConfig[type]?.difficulties || [];
+    return questions.filter(q => {
+      const qGrade = (q.grade || q.class || '').toString().toLowerCase();
+      const qSubject = (q.subject || '').toLowerCase();
+      const qBook = (q.book || '').toLowerCase();
+      const qChapter = q.chapter || '';
+      const qSLO = q.slo || '';
+      const qType = (q.type || q.questionType || '').toLowerCase();
+      const qDifficulty = q.difficulty || 'Medium';
+      const normalizedType = qType === 'mcqs' ? 'multiple' : qType.replace('_', '');
+      
+      const basicMatch = qGrade === selectedGrade.toLowerCase() && 
+                        qSubject === selectedSubject.toLowerCase() && 
+                        qBook === selectedBook.toLowerCase() &&
+                        normalizedType === type;
+      
+      if (!basicMatch) return false;
+      if (selectedChapters.length > 0 && !selectedChapters.includes(qChapter)) return false;
+      if (selectedSLOs.length > 0 && !selectedSLOs.includes(qSLO)) return false;
+      if (selectedDifficulties.length > 0 && !selectedDifficulties.includes(qDifficulty)) return false;
+      
+      return true;
+    }).length;
+  }, [questions, selectedGrade, selectedSubject, selectedBook, selectedChapters, selectedSLOs, questionConfig]);
+
+  const getTotalConfiguredQuestions = useCallback(() => {
+    return Object.values(questionConfig).reduce((sum, config) => sum + config.count, 0);
+  }, [questionConfig]);
 
   const generateQuestions = useCallback((overrideSeed = null) => {
     const seedToUse = overrideSeed || randomSeed;
-    const filtered = filterQuestions();
-    if (!Object.values(difficultyLevels).some(Boolean) || (hasQuestionType && !Object.values(questionTypes).some(Boolean))) return [];
-
-    const selectedTypes = Object.keys(questionTypes).filter(t => questionTypes[t]);
-    const selectedDifficulties = Object.keys(difficultyLevels).filter(d => difficultyLevels[d]);
+    
+    // Build questions based on questionConfig
     let allQuestions = [];
+    let questionCounter = 1;
 
-    if (hasQuestionType) {
-      selectedTypes.forEach(type => {
-        selectedDifficulties.forEach(difficulty => {
-          const bucket = filtered.filter(q => {
-            const qType = (q.type || q.questionType || '').toLowerCase();
-            return qType === type.toLowerCase() || (qType === 'mcqs' && type === 'multiple');
-          });
-          allQuestions = [...allQuestions, ...shuffle(bucket, seedToUse).slice(0, Math.floor(totalQuestions / (selectedTypes.length * selectedDifficulties.length)))];
-        });
+    Object.entries(questionConfig).forEach(([type, config]) => {
+      if (config.count === 0) return;
+
+      // Filter questions for this type with selected difficulties
+      const typeQuestions = questions.filter(q => {
+        const qGrade = (q.grade || q.class || '').toString().toLowerCase();
+        const qSubject = (q.subject || '').toLowerCase();
+        const qBook = (q.book || '').toLowerCase();
+        const qChapter = q.chapter || '';
+        const qSLO = q.slo || '';
+        const qType = (q.type || q.questionType || '').toLowerCase();
+        const qDifficulty = q.difficulty || 'Medium';
+        const normalizedType = qType === 'mcqs' ? 'multiple' : qType.replace('_', '');
+
+        return qGrade === selectedGrade.toLowerCase() &&
+               qSubject === selectedSubject.toLowerCase() &&
+               qBook === selectedBook.toLowerCase() &&
+               (selectedChapters.length === 0 || selectedChapters.includes(qChapter)) &&
+               (selectedSLOs.length === 0 || selectedSLOs.includes(qSLO)) &&
+               normalizedType === type &&
+               (config.difficulties.length === 0 || config.difficulties.includes(qDifficulty));
       });
-    } else {
-      selectedDifficulties.forEach(difficulty => {
-        const bucket = filtered.filter(q => (q.difficulty || '').toLowerCase() === difficulty.toLowerCase());
-        allQuestions = [...allQuestions, ...shuffle(bucket, seedToUse).slice(0, Math.floor(totalQuestions / selectedDifficulties.length))];
-      });
-    }
 
-    const remaining = totalQuestions - allQuestions.length;
-    if (remaining > 0) {
-      allQuestions = [...allQuestions, ...shuffle(filtered.filter(q => !allQuestions.includes(q)), seedToUse).slice(0, remaining)];
-    }
+      // Shuffle and select the required count
+      const selectedQuestions = shuffle(typeQuestions, seedToUse).slice(0, config.count);
 
-    return shuffle(allQuestions.slice(0, totalQuestions), seedToUse)
-      .map((q, i) => {
-        if (!q.questionText || !q.difficulty || !q.subject || !q.grade) return null;
+      // Convert to quiz format
+      selectedQuestions.forEach(q => {
+        if (!q.questionText || !q.subject || !q.grade) return;
 
-        const qType = (q.type || q.questionType || '').toLowerCase() === 'mcqs' ? 'multiple' : (q.type || q.questionType || '').toLowerCase().replace('_', '');
-        let options = qType === 'multiple' ? shuffle(q.options.map((opt, idx) => ({
-          text: opt || `Option ${idx + 1}`,
-          format: q.subject === 'Math' ? 'math' : 'text',
-        })), seedToUse) : [];
+        const qType = type;
+        let options = [];
+        let answer = null;
 
-        let answer = qType === 'multiple'
-          ? { value: options.findIndex(opt => opt.text === q.correctAnswer), text: q.correctAnswer }
-          : qType === 'truefalse'
-          ? { value: q.correctAnswer?.toLowerCase() === 'true', text: q.correctAnswer }
-          : qType === 'fillblanks'
-          ? { value: Object.fromEntries(Object.entries(q.blanks || {}).map(([k, v]) => [k, v || []])), text: q.correctAnswer || '' }
-          : { value: q.correctAnswer || '', text: q.correctAnswer || '' };
+        if (qType === 'multiple') {
+          options = shuffle(q.options.map((opt, idx) => ({
+            text: opt || `Option ${idx + 1}`,
+            format: q.subject === 'Math' ? 'math' : 'text',
+          })), seedToUse);
+          answer = { value: options.findIndex(opt => opt.text === q.correctAnswer), text: q.correctAnswer };
+          if (answer.value === -1 || !q.correctAnswer) return;
+        } else if (qType === 'truefalse') {
+          const trueFalseOptions = [
+            { text: 'True', format: 'text' },
+            { text: 'False', format: 'text' }
+          ];
+          options = shuffle(trueFalseOptions, seedToUse);
+          const correctAnswerBoolean = q.correctAnswer?.toLowerCase() === 'true';
+          answer = { value: correctAnswerBoolean, text: q.correctAnswer };
+        } else if (qType === 'fillblanks') {
+          answer = { value: Object.fromEntries(Object.entries(q.blanks || {}).map(([k, v]) => [k, v || []])), text: q.correctAnswer || '' };
+        } else {
+          answer = { value: q.correctAnswer || '', text: q.correctAnswer || '' };
+        }
 
-        if (qType === 'multiple' && (answer.value === -1 || !q.correctAnswer)) return null;
-
-        return {
-          id: i + 1,
+        allQuestions.push({
+          id: questionCounter++,
           type: qType,
           grade: q.grade,
           subject: q.subject,
           difficulty: q.difficulty,
           slo: q.slo || '',
-          marks: isMarked ? 1 : 0,
+          marks: isMarked ? config.marks : 0,
           question: { text: q.questionText, format: q.subject === 'Math' ? 'math' : 'text', isRTL: q.subject === 'Urdu' },
           options,
           answer,
           explanation: { text: q.explanation || '', format: 'text', isRTL: false },
-        };
-      })
-      .filter(q => q !== null);
-  }, [filterQuestions, totalQuestions, isMarked, randomSeed, questionTypes, difficultyLevels, hasQuestionType]);
+        });
+      });
+    });
+
+    // Shuffle all questions for final quiz
+    return shuffle(allQuestions, seedToUse);
+  }, [questions, questionConfig, selectedGrade, selectedSubject, selectedBook, selectedChapters, selectedSLOs, isMarked, randomSeed]);
 
   const validateQuizSettings = useCallback(() => {
     const errors = [];
-    if (!selectedGrade || !selectedSubject) errors.push('Please select grade and subject');
-    if (hasQuestionType && !Object.values(questionTypes).some(Boolean)) errors.push('Select at least one question type');
-    if (!Object.values(difficultyLevels).some(Boolean)) errors.push('Select at least one difficulty level');
-    if (totalQuestions < 1 || totalQuestions > maxQuestions) errors.push(`Total questions must be between 1 and ${maxQuestions}`);
-    if (timeLimit < 1 || timeLimit > maxTimeLimit) errors.push(`Time limit must be between 1 and ${maxTimeLimit} minutes`);
-    if (!scheduledStart || new Date(scheduledStart) < new Date()) errors.push('Scheduled start must be in the future');
-    if (scheduledEnd && new Date(scheduledEnd) <= new Date(scheduledStart)) errors.push('Scheduled end must be after start');
-    if (isMarked && editedQuestions.some(q => q.marks <= 0)) errors.push('All questions must have positive marks');
+    if (!selectedGrade || !selectedSubject || !selectedBook) errors.push('Please select grade, subject, and book');
+    const totalQuestionsConfigured = Object.values(questionConfig).reduce((sum, config) => sum + config.count, 0);
+    if (totalQuestionsConfigured === 0) errors.push('Please configure at least one question');
     return errors.length ? errors.join('\n') : '';
-  }, [selectedGrade, selectedSubject, questionTypes, difficultyLevels, totalQuestions, timeLimit, scheduledStart, scheduledEnd, isMarked, editedQuestions]);
+  }, [selectedGrade, selectedSubject, selectedBook, questionConfig]);
 
   const handleCreateQuiz = () => {
     const error = validateQuizSettings();
@@ -288,9 +504,8 @@ const QuizGeneration = () => {
       setRandomSeed(newSeed);
       const questions = generateQuestions(newSeed);
       if (questions.length === 0) {
-        const selectedTypes = Object.keys(questionTypes).filter(t => questionTypes[t]);
-        const selectedDifficulties = Object.keys(difficultyLevels).filter(d => difficultyLevels[d]);
-        alert(`No questions available for the selected criteria.\nGrade: ${selectedGrade}\nSubject: ${selectedSubject}\n${hasQuestionType ? `Question Types: ${selectedTypes.join(', ')}\n` : ''}Difficulties: ${selectedDifficulties.join(', ')}\nPlease check your database for matching questions.`);
+        const configuredTypes = Object.entries(questionConfig).filter(([_, config]) => config.count > 0).map(([type, _]) => type);
+        alert(`No questions available for the configured criteria.\nGrade: ${selectedGrade}\nSubject: ${selectedSubject}\nBook: ${selectedBook}\nChapters: ${selectedChapters.join(', ') || 'All'}\nSLOs: ${selectedSLOs.join(', ') || 'All'}\nQuestion Types: ${configuredTypes.join(', ')}\nPlease check your database for matching questions.`);
         return;
       }
 
@@ -309,11 +524,18 @@ const QuizGeneration = () => {
       quizType,
       class: selectedGrade,
       subject: selectedSubject,
-      questionTypes: hasQuestionType ? Object.keys(questionTypes).filter(t => questionTypes[t]) : [],
-      difficulties: Object.keys(difficultyLevels).filter(d => difficultyLevels[d]),
+      book: selectedBook,
+      chapters: selectedChapters,
+      slos: selectedSLOs,
+      questionConfiguration: Object.entries(questionConfig).filter(([_, config]) => config.count > 0).map(([type, config]) => ({
+        type,
+        count: config.count,
+        difficulties: (config.difficulties && config.difficulties.length > 0) ? config.difficulties : ['Easy', 'Medium', 'Hard'],
+        marksEach: config.marks
+      })),
       isMarked,
-      timeLimitMinutes: timeLimit,
-      schedule: { startAt: new Date(scheduledStart), endAt: scheduledEnd ? new Date(scheduledEnd) : null },
+      timeLimitMinutes: null,
+      schedule: null,
       totalQuestions: questions.length,
       questionIds: questions.map(q => q.id),
       items: questions.map(q => ({
@@ -361,15 +583,38 @@ const QuizGeneration = () => {
 
   const handleSaveChanges = async () => {
     if (!generatedQuiz) return;
+    
+    // Validate quiz settings
+    const errors = [];
+    if (timeLimit < 1 || timeLimit > maxTimeLimit) {
+      errors.push(`Time limit must be between 1 and ${maxTimeLimit} minutes`);
+    }
+    if (!scheduledStart || new Date(scheduledStart) < new Date()) {
+      errors.push('Scheduled start must be in the future');
+    }
+    if (scheduledEnd && new Date(scheduledEnd) <= new Date(scheduledStart)) {
+      errors.push('Scheduled end must be after scheduled start');
+    }
+    
+    if (errors.length > 0) {
+      alert('Please fix the following errors:\n\n' + errors.join('\n'));
+      return;
+    }
+    
     try {
       const sanitizedQuiz = {
         ...generatedQuiz,
         items: editedQuestions,
         totalMarks: isMarked ? editedQuestions.reduce((sum, q) => sum + q.marks, 0) : null,
+        timeLimitMinutes: timeLimit,
+        schedule: { 
+          startAt: Timestamp.fromDate(new Date(scheduledStart)), 
+          endAt: scheduledEnd ? Timestamp.fromDate(new Date(scheduledEnd)) : null 
+        },
         updatedAt: serverTimestamp(),
       };
       setGeneratedQuiz(sanitizedQuiz);
-      alert('Quiz updated.');
+      alert('Quiz updated successfully!');
     } catch (error) {
       alert('Error saving changes: ' + error.message);
     }
@@ -386,6 +631,30 @@ const QuizGeneration = () => {
 
   const downloadQuizPDF = () => {
     if (!generatedQuiz) return;
+    
+    // Helper function to replace {blank#} placeholders with underscores
+    const replaceBlanks = (text) => {
+      if (!text || typeof text !== 'string') return text;
+      return text.replace(/\{blank\d+\}/g, '________');
+    };
+    
+    // Preprocess ALL questions to replace {blank#} placeholders everywhere
+    const processedQuestions = editedQuestions.map(q => ({
+      ...q,
+      question: {
+        ...q.question,
+        text: replaceBlanks(q.question.text)
+      },
+      options: q.options?.map(opt => ({
+        ...opt,
+        text: replaceBlanks(opt.text)
+      })),
+      answer: {
+        ...q.answer,
+        text: typeof q.answer.text === 'string' ? replaceBlanks(q.answer.text) : q.answer.text
+      }
+    }));
+    
     const pdfContent = `
       <!DOCTYPE html>
       <html dir="ltr">
@@ -465,7 +734,7 @@ const QuizGeneration = () => {
             </tr>
           </table>
         </div>
-        ${editedQuestions
+        ${processedQuestions
           .map(
             (q, i) => `
               <div class="question">
@@ -481,7 +750,7 @@ const QuizGeneration = () => {
                     ? `<div class="options ${q.question.isRTL ? 'urdu' : ''}">${q.options
                         .map(
                           (opt, j) =>
-                            `<div class="option">${q.question.isRTL ? optionLabels(true)[j] : String.fromCharCode(65 + j)}. ${opt.format === 'math' ? '\\[' + opt.text + '\\]' : opt.text}</div>`
+                            `<div class="option">${q.question.isRTL ? optionLabels(true)[j] : String.fromCharCode(65 + j)}. ${opt.format === 'math' ? '\\(' + opt.text + '\\)' : opt.text}</div>`
                         )
                         .join('')}</div>`
                     : q.type === 'truefalse'
@@ -490,11 +759,11 @@ const QuizGeneration = () => {
                         <div class="option">${q.question.isRTL ? 'ب' : 'B'}. ${q.question.isRTL ? 'غلط' : 'False'}</div>
                       </div>`
                     : q.type === 'fillblanks'
-                    ? `<div class="options ${q.question.isRTL ? 'urdu' : ''}"><div class="option">${extractLatexFromFormulas(q.question.text).replace(/{blank\d+}|___/g, '________')}</div></div>`
+                    ? ''
                     : `<div class="options ${q.question.isRTL ? 'urdu' : ''}"><div class="option">${q.question.isRTL ? 'نیچے اپنا جواب لکھیں۔' : 'Write your answer below.'}</div></div>`
                 }
               </div>
-              ${(i + 1) % 5 === 0 && i < editedQuestions.length - 1 ? '<div class="page-break"></div>' : ''}
+              ${(i + 1) % 5 === 0 && i < processedQuestions.length - 1 ? '<div class="page-break"></div>' : ''}
             `
           )
           .join('')}
@@ -530,6 +799,30 @@ const QuizGeneration = () => {
 
   const downloadAnswerKey = () => {
     if (!generatedQuiz) return;
+    
+    // Helper function to replace {blank#} placeholders with underscores
+    const replaceBlanks = (text) => {
+      if (!text || typeof text !== 'string') return text;
+      return text.replace(/\{blank\d+\}/g, '________');
+    };
+    
+    // Preprocess ALL questions to replace {blank#} placeholders everywhere
+    const processedQuestions = editedQuestions.map(q => ({
+      ...q,
+      question: {
+        ...q.question,
+        text: replaceBlanks(q.question.text)
+      },
+      options: q.options?.map(opt => ({
+        ...opt,
+        text: replaceBlanks(opt.text)
+      })),
+      answer: {
+        ...q.answer,
+        text: typeof q.answer.text === 'string' ? replaceBlanks(q.answer.text) : q.answer.text
+      }
+    }));
+    
     const answerKeyContent = `
       <!DOCTYPE html>
       <html dir="ltr">
@@ -574,7 +867,7 @@ const QuizGeneration = () => {
           <div class="info"><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
           <div class="info"><strong>Total Questions:</strong> ${generatedQuiz.totalQuestions}</div>
         </div>
-        ${editedQuestions
+        ${processedQuestions
           .map(
             (q, i) => `
               <div class="answer">
@@ -886,7 +1179,13 @@ const QuizGeneration = () => {
                 }),
               ]),
               new Paragraph({
-                children: [new TextRun({ text: extractLatexFromFormulas(q.question.text), size: 24, font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' })],
+                children: [new TextRun({ 
+                  text: q.type === 'fillblanks' 
+                    ? convertFormulasToReadable(q.question.text.replace(/\{blank\d+\}/g, '________'))
+                    : convertFormulasToReadable(q.question.text), 
+                  size: 24, 
+                  font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' 
+                })],
                 alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
                 spacing: { after: 100 },
               }),
@@ -894,7 +1193,7 @@ const QuizGeneration = () => {
                 ? q.options.map((opt, j) => 
                       new Paragraph({
                         children: [new TextRun({ 
-                          text: `${q.question.isRTL ? optionLabels(true)[j] : String.fromCharCode(65 + j)}. ${opt.text}`, 
+                          text: `${q.question.isRTL ? optionLabels(true)[j] : String.fromCharCode(65 + j)}. ${convertFormulasToReadable(opt.text)}`, 
                           size: 24, 
                           font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' 
                         })],
@@ -902,39 +1201,20 @@ const QuizGeneration = () => {
                         spacing: { after: 50 },
                       })
                   )
-                : q.type === 'truefalse'
-                ? [
-                    new Paragraph({
-                      children: [new TextRun({ 
-                        text: `${q.question.isRTL ? 'ا' : 'A'}. ${q.question.isRTL ? 'صحیح' : 'True'}`, 
-                        size: 24, 
-                        font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' 
-                      })],
-                      alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
-                      spacing: { after: 50 },
-                    }),
-                    new Paragraph({
-                      children: [new TextRun({ 
-                        text: `${q.question.isRTL ? 'ب' : 'B'}. ${q.question.isRTL ? 'غلط' : 'False'}`, 
-                        size: 24, 
-                        font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' 
-                      })],
-                      alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
-                      spacing: { after: 50 },
-                    }),
-                  ]
+                : q.type === 'truefalse' && q.options?.length
+                ? q.options.map((opt, j) => 
+                      new Paragraph({
+                        children: [new TextRun({ 
+                          text: `${q.question.isRTL ? optionLabels(true)[j] : String.fromCharCode(65 + j)}. ${q.question.isRTL ? (opt.text === 'True' ? 'صحیح' : 'غلط') : opt.text}`, 
+                          size: 24, 
+                          font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' 
+                        })],
+                        alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
+                        spacing: { after: 50 },
+                      })
+                  )
                 : q.type === 'fillblanks'
-                ? [
-                    new Paragraph({
-                      children: [new TextRun({ 
-                        text: extractLatexFromFormulas(q.question.text).replace(/{blank\d+}|___/g, '________'), 
-                        size: 24, 
-                        font: q.question.isRTL ? 'Noto Nastaliq Urdu' : 'Arial' 
-                      })],
-                      alignment: q.question.isRTL ? AlignmentType.RIGHT : AlignmentType.LEFT,
-                      spacing: { after: 50 },
-                    }),
-                  ]
+                ? []
                 : [
                     new Paragraph({
                       children: [new TextRun({ 
@@ -968,33 +1248,50 @@ const QuizGeneration = () => {
 
   return (
     <MathJaxContext config={mathJaxConfig}>
-      <div className="flex h-screen bg-gray-50">
-        <Sidebar userRole="Teacher" currentPage="quiz" />
-        <div className="flex-1 overflow-auto p-8 ml-[256px]">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Generate Quiz</h1>
-            <p className="text-gray-600">Create randomized quizzes for your students</p>
-          </div>
+      <div className="flex min-h-screen bg-gray-50">
+        <Sidebar userRole="Teacher" currentPage="quiz" open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="flex-1 overflow-auto lg:ml-64">
+          <div className="p-4 sm:p-6 lg:p-8">
+            <div className="mb-6 sm:mb-8">
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="lg:hidden min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  aria-label="Open menu"
+                >
+                  <i className="ri-menu-line text-2xl"></i>
+                </button>
+                <div>
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">Generate Quiz</h1>
+                  <p className="text-sm sm:text-base text-gray-600">Create randomized quizzes for your students</p>
+                </div>
+              </div>
+            </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
+              {/* Step 1: Grade, Subject, Book Selection */}
               <div className="bg-white rounded-xl shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Filters</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <span className="bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center text-sm mr-2">1</span>
+                  Course Selection
+                </h3>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Grade</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Grade / Class</label>
                     <select
                       value={selectedGrade}
                       onChange={e => {
                         setSelectedGrade(e.target.value);
                         setSelectedSubject('');
+                        setSelectedBook('');
+                        setSelectedChapters([]);
+                        setSelectedSLOs([]);
                       }}
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                     >
-                      <option value="">Select a grade</option>
+                      <option value="">Select Grade</option>
                       {grades.map(grade => (
-                        <option key={grade} value={grade}>
-                          Grade {grade}
-                        </option>
+                        <option key={grade} value={grade}>Class {grade}</option>
                       ))}
                     </select>
                   </div>
@@ -1003,102 +1300,264 @@ const QuizGeneration = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
                       <select
                         value={selectedSubject}
-                        onChange={e => setSelectedSubject(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                        onChange={e => {
+                          setSelectedSubject(e.target.value);
+                          setSelectedBook('');
+                          setSelectedChapters([]);
+                          setSelectedSLOs([]);
+                        }}
+                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                       >
-                        <option value="">Select a subject</option>
+                        <option value="">Select Subject</option>
                         {subjects.map(subject => (
-                          <option key={subject} value={subject}>
-                            {subject}
-                        </option>
+                          <option key={subject} value={subject}>{subject}</option>
                         ))}
                       </select>
                     </div>
                   )}
                   {selectedSubject && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-3">Question Types</label>
-                        <div className="space-y-2">
-                          {Object.keys(questionTypes).map(type => (
-                            <label key={type} className="flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={questionTypes[type]}
-                                onChange={() => setQuestionTypes(prev => ({ ...prev, [type]: !prev[type] }))}
-                                className="mr-3"
-                              />
-                              <span className="text-sm text-gray-700">
-                                {type === 'multiple' ? 'Multiple Choice (MCQs)' : type.replace(/([A-Z])/g, ' $1').trim()}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-3">Difficulty Levels</label>
-                        <div className="space-y-2">
-                          {Object.keys(difficultyLevels).map(level => (
-                            <label key={level} className="flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={difficultyLevels[level]}
-                                onChange={() => setDifficultyLevels(prev => ({ ...prev, [level]: !prev[level] }))}
-                                className="mr-3"
-                              />
-                              <span className="text-sm text-gray-700">{level}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Total Questions</label>
-                        <input
-                          type="number"
-                          value={totalQuestions}
-                          onChange={e => setTotalQuestions(Math.min(parseInt(e.target.value) || 1, maxQuestions))}
-                          min="1"
-                          max={maxQuestions}
-                          className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Max: {getTotalAvailableQuestions()} available</p>
-                      </div>
-                    </>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Book</label>
+                      <select
+                        value={selectedBook}
+                        onChange={e => {
+                          setSelectedBook(e.target.value);
+                          setSelectedChapters([]);
+                          setSelectedSLOs([]);
+                        }}
+                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+                      >
+                        <option value="">Select Book</option>
+                        {(books[selectedGrade]?.[selectedSubject] || []).map(book => (
+                          <option key={book} value={book}>{book}</option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </div>
               </div>
-              {selectedSubject && (
+
+              {/* Step 2: Chapter Selection */}
+              {selectedBook && (
                 <div className="bg-white rounded-xl shadow-sm border p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Quiz Settings</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                      <span className="bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center text-sm mr-2">2</span>
+                      Select Chapters
+                    </h3>
+                    {getAvailableChapters().length > 0 && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setSelectedChapters(getAvailableChapters())}
+                          className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          Select All
+                        </button>
+                        <span className="text-gray-300">|</span>
+                        <button
+                          onClick={() => {
+                            setSelectedChapters([]);
+                            setSelectedSLOs([]);
+                          }}
+                          className="text-xs text-gray-600 hover:text-gray-700 font-medium"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {getAvailableChapters().length > 0 ? (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto">
+                        {getAvailableChapters().map(chapter => (
+                          <label key={chapter} className="flex items-start cursor-pointer p-3 border rounded-lg hover:bg-blue-50 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={selectedChapters.includes(chapter)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedChapters(prev => [...prev, chapter]);
+                                } else {
+                                  setSelectedChapters(prev => prev.filter(c => c !== chapter));
+                                  setSelectedSLOs([]);
+                                }
+                              }}
+                              className="mt-1 mr-3 min-w-[16px]"
+                            />
+                            <span className="text-sm text-gray-700">{chapter}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-3">{selectedChapters.length} chapter(s) selected</p>
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                      <p className="mt-2 text-sm text-gray-600">No chapters found for this book</p>
+                      <p className="text-xs text-gray-500 mt-1">Please add questions with chapters for &quot;{selectedBook}&quot; first</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 3: SLO Selection */}
+              {selectedChapters.length > 0 && getAvailableSLOs().length > 0 && (
+                <div className="bg-white rounded-xl shadow-sm border p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                      <span className="bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center text-sm mr-2">3</span>
+                      Select Learning Outcomes (SLOs)
+                    </h3>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedSLOs(getAvailableSLOs())}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        onClick={() => setSelectedSLOs([])}
+                        className="text-xs text-gray-600 hover:text-gray-700 font-medium"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {getAvailableSLOs().map(slo => (
+                      <label key={slo} className="flex items-start cursor-pointer p-3 border rounded-lg hover:bg-blue-50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={selectedSLOs.includes(slo)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedSLOs(prev => [...prev, slo]);
+                            } else {
+                              setSelectedSLOs(prev => prev.filter(s => s !== slo));
+                            }
+                          }}
+                          className="mt-1 mr-3 min-w-[16px]"
+                        />
+                        <span className="text-sm text-gray-700">{slo}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-3">{selectedSLOs.length} SLO(s) selected</p>
+                </div>
+              )}
+
+              {/* Step 4: Question Configuration by Type */}
+              {selectedBook && (selectedChapters.length > 0 || selectedSLOs.length > 0) && (
+                <div className="bg-white rounded-xl shadow-sm border p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <span className="bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center text-sm mr-2">4</span>
+                    Configure Questions
+                  </h3>
                   <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Time Limit (minutes)</label>
-                      <input
-                        type="number"
-                        value={timeLimit}
-                        onChange={e => setTimeLimit(parseInt(e.target.value) || 1)}
-                        min="1"
-                        max={maxTimeLimit}
-                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                      />
+                    {[
+                      { key: 'multiple', label: 'Multiple Choice (MCQs)', icon: 'ri-checkbox-multiple-line' },
+                      { key: 'truefalse', label: 'True/False', icon: 'ri-check-line' },
+                      { key: 'short', label: 'Short Answer', icon: 'ri-text' },
+                      { key: 'long', label: 'Long Answer', icon: 'ri-file-text-line' },
+                      { key: 'fillblanks', label: 'Fill in the Blanks', icon: 'ri-input-cursor-move' }
+                    ].map(({ key, label, icon }) => {
+                      const available = getQuestionCountByType(key);
+                      return (
+                        <div key={key} className="border rounded-lg p-4 bg-gray-50">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <i className={`${icon} text-blue-600`}></i>
+                              <span className="font-medium text-gray-900">{label}</span>
+                              <span className="text-xs text-gray-500">({available} available)</span>
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={available}
+                                  value={questionConfig[key].count}
+                                  onChange={e => setQuestionConfig(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], count: Math.min(parseInt(e.target.value) || 0, available) }
+                                  }))}
+                                  className="w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500"
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Marks Each</label>
+                                <input
+                                  type="number"
+                                  min="0.5"
+                                  step="0.5"
+                                  value={questionConfig[key].marks}
+                                  onChange={e => setQuestionConfig(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], marks: parseFloat(e.target.value) || 0 }
+                                  }))}
+                                  className="w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500"
+                                  placeholder="1"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-2">Difficulty Levels</label>
+                              <div className="flex flex-wrap gap-3">
+                                {['Easy', 'Medium', 'Hard'].map(difficulty => (
+                                  <label key={difficulty} className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={questionConfig[key].difficulties.includes(difficulty)}
+                                      onChange={e => {
+                                        // Prevent deselecting all difficulties
+                                        if (!e.target.checked && questionConfig[key].difficulties.length === 1) {
+                                          alert('Please select at least one difficulty level');
+                                          return;
+                                        }
+                                        
+                                        const newDifficulties = e.target.checked
+                                          ? [...questionConfig[key].difficulties, difficulty]
+                                          : questionConfig[key].difficulties.filter(d => d !== difficulty);
+                                        
+                                        setQuestionConfig(prev => ({
+                                          ...prev,
+                                          [key]: {
+                                            ...prev[key],
+                                            difficulties: newDifficulties
+                                          }
+                                        }));
+                                      }}
+                                      className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <span className="text-sm text-gray-700">{difficulty}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium text-gray-700">Total Questions:</span>
+                      <span className="font-bold text-blue-600">
+                        {Object.values(questionConfig).reduce((sum, config) => sum + config.count, 0)}
+                      </span>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Scheduled Start</label>
-                      <input
-                        type="datetime-local"
-                        value={scheduledStart}
-                        onChange={e => setScheduledStart(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Scheduled End (Optional)</label>
-                      <input
-                        type="datetime-local"
-                        value={scheduledEnd}
-                        onChange={e => setScheduledEnd(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                      />
+                    <div className="flex justify-between text-sm mt-1">
+                      <span className="font-medium text-gray-700">Total Marks:</span>
+                      <span className="font-bold text-blue-600">
+                        {Object.values(questionConfig).reduce((sum, config) => sum + (config.count * config.marks), 0)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1109,28 +1568,60 @@ const QuizGeneration = () => {
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Quiz Summary</h3>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Grade:</span>
-                    <span className="font-medium text-gray-900">{selectedGrade || 'None'}</span>
+                    <span className="text-gray-600">Class:</span>
+                    <span className="font-medium text-gray-900">{selectedGrade ? `Class ${selectedGrade}` : 'Not Selected'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Subject:</span>
-                    <span className="font-medium text-gray-900">{selectedSubject || 'None'}</span>
+                    <span className="font-medium text-gray-900">{selectedSubject || 'Not Selected'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Questions:</span>
-                    <span className="font-medium text-gray-900">{totalQuestions}</span>
+                    <span className="text-gray-600">Book:</span>
+                    <span className="font-medium text-gray-900 text-right">{selectedBook || 'Not Selected'}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Available:</span>
-                    <span className="font-medium text-gray-900">{getTotalAvailableQuestions()}</span>
+                  <div className="border-t pt-3">
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-600">Chapters:</span>
+                      <span className="font-medium text-gray-900">{selectedChapters.length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">SLOs:</span>
+                      <span className="font-medium text-gray-900">{selectedSLOs.length > 0 ? selectedSLOs.length : 'All'}</span>
+                    </div>
                   </div>
+                  <div className="border-t pt-3">
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-600">Total Questions:</span>
+                      <span className="font-bold text-blue-600">
+                        {Object.values(questionConfig).reduce((sum, config) => sum + config.count, 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total Marks:</span>
+                      <span className="font-bold text-blue-600">
+                        {Object.values(questionConfig).reduce((sum, config) => sum + (config.count * config.marks), 0)}
+                      </span>
+                    </div>
+                  </div>
+                  {selectedBook && (
+                    <div className="border-t pt-3 text-xs text-gray-500">
+                      <div className="space-y-1">
+                        {Object.entries(questionConfig).map(([type, config]) => config.count > 0 && (
+                          <div key={type} className="flex justify-between">
+                            <span className="capitalize">{type === 'multiple' ? 'MCQs' : type === 'truefalse' ? 'True/False' : type === 'fillblanks' ? 'Fill Blanks' : type}:</span>
+                            <span>{config.count} × {config.marks}m</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={handleCreateQuiz}
-                  disabled={!selectedGrade || !selectedSubject || (hasQuestionType && !Object.values(questionTypes).some(Boolean)) || !Object.values(difficultyLevels).some(Boolean)}
+                  disabled={!selectedBook || Object.values(questionConfig).reduce((sum, config) => sum + config.count, 0) === 0}
                   className="w-full mt-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors"
                 >
-                  <i className="ri-file-list-3-line mr-2"></i>Create Quiz
+                  <i className="ri-file-list-3-line mr-2"></i>Generate Quiz
                 </button>
               </div>
             </div>
@@ -1230,6 +1721,55 @@ const QuizGeneration = () => {
                   <div className="mb-6">
                     <h4 className="text-lg font-semibold">Total Marks: {isMarked ? editedQuestions.reduce((sum, q) => sum + q.marks, 0) : 'N/A'}</h4>
                   </div>
+                  
+                  {/* Quiz Settings Section */}
+                  <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="text-md font-semibold text-gray-900 mb-4 flex items-center">
+                      <i className="ri-settings-3-line mr-2 text-blue-600"></i>
+                      Quiz Settings
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Time Limit (minutes)
+                          <span className="text-red-500 ml-1">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          value={timeLimit}
+                          onChange={e => setTimeLimit(parseInt(e.target.value) || 1)}
+                          min="1"
+                          max={maxTimeLimit}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="e.g., 30"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Scheduled Start
+                          <span className="text-red-500 ml-1">*</span>
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={scheduledStart}
+                          onChange={e => setScheduledStart(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Scheduled End <span className="text-gray-500 text-xs">(Optional)</span>
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={scheduledEnd}
+                          onChange={e => setScheduledEnd(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   {editedQuestions.map((q, index) => (
                     <div key={index} className="mb-4 p-4 border rounded-lg">
                       <div className="flex justify-between">
@@ -1259,7 +1799,9 @@ const QuizGeneration = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-2">Options:</label>
                             {q.options.map((opt, i) => (
                               <div key={i} className={`flex items-center space-x-2 mb-2 ${q.question.isRTL ? 'space-x-reverse' : ''}`}>
-                                <span className={q.question.isRTL ? 'font-noto-nastaliq' : ''}>{q.question.isRTL ? optionLabels(true)[i] : String.fromCharCode(65 + i)}.</span>
+                                <span className={`font-semibold ${q.question.isRTL ? 'font-noto-nastaliq' : ''} ${q.answer.value === i ? 'text-green-600' : ''}`}>
+                                  {q.question.isRTL ? optionLabels(true)[i] : String.fromCharCode(65 + i)}.
+                                </span>
                                 <input
                                   value={opt.text}
                                   onChange={e => {
@@ -1267,65 +1809,46 @@ const QuizGeneration = () => {
                                     newOptions[i] = { ...newOptions[i], text: e.target.value };
                                     handleEditQuestion(index, 'options', newOptions);
                                   }}
-                                  className={`flex-1 p-2 border rounded ${q.question.isRTL ? 'text-right font-noto-nastaliq' : ''}`}
+                                  className={`flex-1 p-2 border rounded ${q.question.isRTL ? 'text-right font-noto-nastaliq' : ''} ${q.answer.value === i ? 'bg-green-50 border-green-400' : ''}`}
                                   dir={q.question.isRTL ? 'rtl' : 'ltr'}
                                 />
-                                <input
-                                  type="radio"
-                                  checked={q.answer.value === i}
-                                  onChange={() =>
-                                    handleEditQuestion(index, 'answer', { ...q.answer, value: i, text: q.options[i].text })
-                                  }
-                                  className={q.question.isRTL ? 'mr-2' : 'ml-2'}
-                                />
+                                {q.answer.value === i && (
+                                  <span className="text-green-600 text-xs font-semibold whitespace-nowrap">✓ Correct</span>
+                                )}
                               </div>
                             ))}
                           </div>
                         ) : q.type === 'truefalse' ? (
                           <div className={`mt-2 ${q.question.isRTL ? 'text-right font-noto-nastaliq' : ''}`}>
-                            <label className={q.question.isRTL ? 'ml-4' : 'mr-4'}>
-                              <input
-                                type="radio"
-                                checked={q.answer.value === true}
-                                onChange={() =>
-                                  handleEditQuestion(index, 'answer', { ...q.answer, value: true, text: q.question.isRTL ? 'صحیح' : 'True' })
-                                }
-                                className={q.question.isRTL ? 'ml-2' : 'mr-2'}
-                              />
-                              <span className={q.question.isRTL ? 'font-noto-nastaliq' : ''}>{q.question.isRTL ? 'صحیح' : 'True'}</span>
-                            </label>
-                            <label>
-                              <input
-                                type="radio"
-                                checked={q.answer.value === false}
-                                onChange={() =>
-                                  handleEditQuestion(index, 'answer', { ...q.answer, value: false, text: q.question.isRTL ? 'غلط' : 'False' })
-                                }
-                                className={q.question.isRTL ? 'ml-2' : 'mr-2'}
-                              />
-                              <span className={q.question.isRTL ? 'font-noto-nastaliq' : ''}>{q.question.isRTL ? 'غلط' : 'False'}</span>
-                            </label>
+                            <div className="mb-2">
+                              <span className={`inline-block px-3 py-1 rounded ${q.answer.value === true ? 'bg-green-100 text-green-800 font-semibold' : 'bg-gray-100 text-gray-600'}`}>
+                                {q.question.isRTL ? 'صحیح' : 'True'}
+                                {q.answer.value === true && ' ✓'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className={`inline-block px-3 py-1 rounded ${q.answer.value === false ? 'bg-green-100 text-green-800 font-semibold' : 'bg-gray-100 text-gray-600'}`}>
+                                {q.question.isRTL ? 'غلط' : 'False'}
+                                {q.answer.value === false && ' ✓'}
+                              </span>
+                            </div>
                           </div>
                         ) : (
-                          <textarea
-                            value={q.type === 'fillblanks' ? JSON.stringify(q.answer.value, null, 2) : q.answer.text}
-                            onChange={e =>
-                              handleEditQuestion(index, 'answer', {
-                                ...q.answer,
-                                value: q.type === 'fillblanks' ? JSON.parse(e.target.value || '{}') : e.target.value,
-                                text: e.target.value,
-                              })
-                            }
-                            className={`w-full p-2 border rounded mt-2 ${q.question.isRTL ? 'text-right font-noto-nastaliq' : ''}`}
-                            dir={q.question.isRTL ? 'rtl' : 'ltr'}
-                          />
+                          <div className={`mt-2 p-3 bg-blue-50 border border-blue-200 rounded ${q.question.isRTL ? 'text-right font-noto-nastaliq' : ''}`}>
+                            <div className="text-xs font-medium text-blue-700 mb-1">
+                              {q.type === 'short' ? 'Short Answer' : q.type === 'long' ? 'Long Answer' : 'Fill in the Blanks'} - Expected Answer:
+                            </div>
+                            <div className="text-sm text-blue-900">
+                              {q.type === 'fillblanks' ? JSON.stringify(q.answer.value, null, 2) : q.answer.text}
+                            </div>
+                          </div>
                         )}
-                        <textarea
-                          value={q.explanation.text}
-                          onChange={e => handleEditQuestion(index, 'explanation', { ...q.explanation, text: e.target.value })}
-                          className="w-full p-2 border rounded mt-2"
-                          placeholder="Explanation (optional)"
-                        />
+                        {q.explanation?.text && (
+                          <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded">
+                            <div className="text-xs font-medium text-gray-700 mb-1">Explanation:</div>
+                            <div className="text-sm text-gray-600">{q.explanation.text}</div>
+                          </div>
+                        )}
                       </MathJax>
                     </div>
                   ))}
@@ -1367,6 +1890,7 @@ const QuizGeneration = () => {
           )}
         </div>
       </div>
+    </div>
     </MathJaxContext>
   );
 };

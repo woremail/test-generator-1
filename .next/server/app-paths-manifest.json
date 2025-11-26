@@ -1,8 +1,8 @@
 {
-  "/student/dashboard/page": "app/student/dashboard/page.js",
-  "/student/quiz/page": "app/student/quiz/page.js",
-  "/student/history/page": "app/student/history/page.js",
-  "/student/favorites/page": "app/student/favorites/page.js",
-  "/student/notifications/page": "app/student/notifications/page.js",
-  "/student/profile/page": "app/student/profile/page.js"
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js",
+  "/teacher/dashboard/page": "app/teacher/dashboard/page.js",
+  "/teacher/questions/page": "app/teacher/questions/page.js",
+  "/teacher/quiz/page": "app/teacher/quiz/page.js",
+  "/_not-found/page": "app/_not-found/page.js"
 }

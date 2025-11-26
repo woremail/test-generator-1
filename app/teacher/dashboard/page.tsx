@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -84,7 +83,7 @@ export default function TeacherDashboard() {
           <h1 className="text-3xl font-bold text-gray-800">Teacher Dashboard</h1>
           <div className="flex items-center space-x-4">
             <div className="text-right">
-              <p className="font-semibold text-gray-800">John Doe</p>
+              <p className="font-semibold text-gray-800">Afra</p>
               <p className="text-sm text-gray-500">Science Teacher</p>
             </div>
             <div className="w-12 h-12 bg-pink-100 rounded-full"></div>
@@ -92,7 +91,7 @@ export default function TeacherDashboard() {
         </header>
 
         <section className="bg-[#FFDBBB] p-6 rounded-2xl mb-8">
-          <h2 className="text-2xl font-bold text-orange-900">Welcome back, John!</h2>
+          <h2 className="text-2xl font-bold text-orange-900">Welcome back, Afra!</h2>
           <p className="text-gray-600">Here is an overview of your quiz activities.</p>
         </section>
 

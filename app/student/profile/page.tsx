@@ -27,7 +27,7 @@ export default function ProfilePage() {
       <Sidebar userRole="Student" currentPage="profile" />
 
       {/* Main Content */}
-      <main className="flex-1 p-6 space-y-6">
+      <main className="flex-1 p-6 space-y-6 ml-64">
         <h1 className="text-2xl font-bold text-gray-900">Profile</h1>
         <p className="text-sm text-gray-600">View and update your personal information.</p>
 

@@ -32,10 +32,7 @@ export default function Sidebar({ userRole, currentPage }: SidebarProps) {
 
   const studentMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'ri-dashboard-line', href: '/student/dashboard' },
-    { id: 'generate', label: 'Generate Quiz', icon: 'ri-lightbulb-line', href: '/student/quiz' },
-    { id: 'history', label: 'Quiz History', icon: 'ri-history-line', href: '/student/history' },
-    { id: 'favorites', label: 'Favorite Quizzes', icon: 'ri-heart-line', href: '/student/favorites' },
-    { id: 'notifications', label: 'Notifications', icon: 'ri-notification-3-line', href: '/student/notifications' },
+    { id: 'learning-progress', label: 'Learning Progress', icon: 'ri-line-chart-line', href: '/student/learning-progress' },
     { id: 'profile', label: 'Profile', icon: 'ri-user-line', href: '/student/profile' },
   ];
 
